@@ -2,7 +2,6 @@
 #include "Utils.h" // AppErrorCode
 #include <iostream>
 #include <libswscale/swscale.h>
-#include <sstream>
 #include <cmath>
 
 extern "C" {
@@ -20,10 +19,8 @@ AsciiConverter::AsciiConverter()
       m_srcHeight(0),
       m_blockWidth(0),
       m_blockHeight(0),
-      m_asciiChars(" .'`^,:;Il!i><~+_-?][}{1)(|\\/tfjrxnumbroCLJVUNYXOZmwqpdbkhao*#MW&8%B@$")
-{
-    // Constructor initializes members; actual FFmpeg setup is in 'init'.
-}
+      m_asciiChars(" .'`^,:;Il!i><~+_-?][}{1)(|\\/tfjrxnumbroCLJVUNYXOZmwqpdbkhao*#MW&8%B@$") // detailed character set
+{}
 
 AsciiConverter::~AsciiConverter() {
     cleanup();
@@ -46,7 +43,6 @@ void AsciiConverter::cleanup() {
 
 int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fmt,
                          int ascii_block_width, int ascii_block_height) {
-    // Ensure state is clean before initialization
     cleanup();
 
     m_srcWidth = src_width;
@@ -61,7 +57,6 @@ int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fm
     if (!m_swsContext) {
         std::cerr << "Error (AsciiConverter::init): Could not initialize SwsContext for ASCII conversion.\n";
         cleanup();
-        // Use custom error code
         return static_cast<int>(AppErrorCode::APP_ERR_CONVERTER_INIT_FAILED);
     }
 
@@ -70,7 +65,7 @@ int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fm
     if (!m_rgbFrame) {
         std::cerr << "Error (AsciiConverter::init): Could not allocate RGB AVFrame: " << av_err2str(AVERROR(ENOMEM)) << "\n";
         cleanup();
-        return AVERROR(ENOMEM); // FFmpeg memory error
+        return AVERROR(ENOMEM);
     }
 
     int num_bytes = av_image_get_buffer_size(AV_PIX_FMT_RGB24, m_srcWidth, m_srcHeight, 1);
@@ -78,9 +73,10 @@ int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fm
     if (!m_rgbBuffer) {
         std::cerr << "Error (AsciiConverter::init): Could not allocate image buffer for RGB frame: " << av_err2str(AVERROR(ENOMEM)) << "\n";
         cleanup();
-        return AVERROR(ENOMEM); // FFmpeg memory error
+        return AVERROR(ENOMEM);
     }
 
+    // RGB24 is a packed format. only data[0] (start of the buffer) and linesize[0] (i.e., srcWidth * 3) are used
     av_image_fill_arrays(m_rgbFrame->data, m_rgbFrame->linesize, m_rgbBuffer, AV_PIX_FMT_RGB24,
                          m_srcWidth, m_srcHeight, 1);
     m_rgbFrame->width = m_srcWidth;
@@ -90,58 +86,80 @@ int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fm
     std::cout << "AsciiConverter initialized. Source: " << m_srcWidth << "x" << m_srcHeight
               << ", ASCII Block: " << m_blockWidth << "x" << m_blockHeight << "\n";
 
-    return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS); // Indicate success
+    return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS); 
 }
 
-std::string AsciiConverter::convert(AVFrame* decoded_frame) {
-    if (!m_swsContext || !m_rgbFrame || !decoded_frame) {
-        std::cerr << "Error (AsciiConverter::convert): Converter not properly initialized or invalid input frame.\n";
-        return ""; // Return empty string on error
+AsciiGrid AsciiConverter::convert(AVFrame* decodedFrame) {
+    AsciiGrid grid;
+
+    if (!m_swsContext || !m_rgbFrame || !decodedFrame) {
+        std::cerr << "Error (AsciiConverter::convert): Not properly initialized.\n";
+        return grid;
     }
 
-    // Convert the decoded frame to RGB24
-    sws_scale(m_swsContext, decoded_frame->data, decoded_frame->linesize, 0, decoded_frame->height,
+    // Convert input frame to RGB24 format
+    sws_scale(m_swsContext, decodedFrame->data, decodedFrame->linesize, 0, decodedFrame->height,
               m_rgbFrame->data, m_rgbFrame->linesize);
 
-    std::stringstream ss;
+    // Compute number of ASCII rows and columns
+    grid.rows = m_srcHeight / m_blockHeight;
+    grid.cols = m_srcWidth / m_blockWidth;
+    grid.chars.resize(grid.rows, std::vector<char>(grid.cols));
+    grid.colours.resize(grid.rows, std::vector<RGB>(grid.cols));
 
-    // Iterate over the RGB24 frame in blocks to generate ASCII
-    for (int y = 0; y < m_srcHeight; y += m_blockHeight) {
-        for (int x = 0; x < m_srcWidth; x += m_blockWidth) {
-            long sum_brightness = 0;
+    // Loop through each ASCII block (row by row, column by column)
+    for (int blockY = 0; blockY < grid.rows; ++blockY) {
+        for (int blockX = 0; blockX < grid.cols; ++blockX) {
+            long rSum = 0, gSum = 0, bSum = 0, brightnessSum = 0;
             int count = 0;
 
-            // Calculate average brightness for the current block
-            for (int dy = 0; dy < m_blockHeight && (y + dy) < m_srcHeight; ++dy) {
-                for (int dx = 0; dx < m_blockWidth && (x + dx) < m_srcWidth; ++dx) {
-                    // Calculate pixel offset: y * stride + x * bytes_per_pixel
-                    // For RGB24, each pixel is 3 bytes (R, G, B)
-                    uint8_t *pixel = m_rgbFrame->data[0] + (y + dy) * m_rgbFrame->linesize[0] + (x + dx) * 3;
+            // Loop through each pixel in the current ASCII block
+            for (int dy = 0; dy < m_blockHeight; ++dy) {
+                for (int dx = 0; dx < m_blockWidth; ++dx) {
+                    int px = blockX * m_blockWidth + dx;
+                    int py = blockY * m_blockHeight + dy;
+
+                    // Boundary check (needed for edge cases on non-divisible resolutions)
+                    if (px >= m_srcWidth || py >= m_srcHeight)
+                        continue;
+
+                    // Compute pointer to pixel in RGB frame
+                    uint8_t* pixel = m_rgbFrame->data[0] + py * m_rgbFrame->linesize[0] + px * 3;
                     uint8_t r = pixel[0];
                     uint8_t g = pixel[1];
                     uint8_t b = pixel[2];
 
-                    // Simple luminance calculation: Y = 0.299R + 0.587G + 0.114B (standard formula)
+                    // Approximate luminance = 0.299R + 0.587G + 0.114B
                     int brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                    sum_brightness += brightness;
+
+                    // Accumulate for averaging
+                    rSum += r;
+                    gSum += g;
+                    bSum += b;
+                    brightnessSum += brightness;
                     count++;
                 }
             }
 
+            // Compute average brightness and colour, and assign to grid
             if (count > 0) {
-                int avg_brightness = static_cast<int>(std::round(static_cast<double>(sum_brightness) / count));
-                // Map average brightness (0-255) to an index in the ascii_chars string
-                // The brightest character is at the end of the string.
-                int char_index = (avg_brightness * (m_asciiChars.length() - 1)) / 255;
-                ss << m_asciiChars[char_index];
+                int avgBrightness = static_cast<int>(std::round(static_cast<double>(brightnessSum) / count));
+                int index = (avgBrightness * (m_asciiChars.size() - 1)) / 255;
+
+                grid.chars[blockY][blockX] = m_asciiChars[index];
+                grid.colours[blockY][blockX] = RGB{
+                    static_cast<uint8_t>(rSum / count),
+                    static_cast<uint8_t>(gSum / count),
+                    static_cast<uint8_t>(bSum / count)
+                }; // set average red, green and blue colours for the block
             } else {
-                ss << " "; // Fallback for empty blocks (shouldn't happen with proper loop)
+                // safety fallback: empty cell
+                grid.chars[blockY][blockX] = ' ';
+                grid.colours[blockY][blockX] = RGB{0, 0, 0};
             }
         }
-        ss << "\n"; // Newline after each row of ASCII characters
     }
 
-    return ss.str();
+    return grid;
 }
-
 } // namespace AsciiVideoFilter

@@ -1,5 +1,5 @@
 #pragma once
-#include "Application.h"
+#include "src/Application.h"
 
 int main(int argc, const char *argv[]) {
     AsciiVideoFilter::Application app;
