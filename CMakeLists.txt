@@ -28,10 +28,15 @@ target_link_libraries(AsciiVideoFilter
 # Include FFmpeg headers
 target_include_directories(AsciiVideoFilter PRIVATE
     ${FFMPEG_INCLUDE_DIRS}
-    src
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/include
 )
 
 # Add compile definitions if needed (some FFmpeg functions require them)
 target_compile_definitions(AsciiVideoFilter PRIVATE
     ${FFMPEG_CFLAGS_OTHER}
 )
+
+# turns out my this is cmake 3.50
+# Generate compile_commands.json
+# set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

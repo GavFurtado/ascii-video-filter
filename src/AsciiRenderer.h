@@ -1,34 +1,80 @@
+#pragma once
+
+#include <string>
 #include "AsciiTypes.h"
 
 extern "C" {
     #include <libavutil/frame.h>
+    #include <libavutil/pixfmt.h>
 }
 
 namespace AsciiVideoFilter {
 
 class AsciiRenderer {
 public:
+    /**
+     * @brief Constructs an uninitialized renderer.
+     */
     AsciiRenderer();
+
+    /**
+     * @brief Frees all resources.
+     */
     ~AsciiRenderer();
 
     /**
-     * @brief Initializes the renderer output resolution and font cell size.
-     * @param width Output frame width (pixels)
-     * @param height Output frame height (pixels)
-     * @param cellWidth Pixel width of each character block
-     * @param cellHeight Pixel height of each character block
+     * @brief Loads font from file and prepares stb_truetype.
+     *
+     * @param fontPath Path to a .ttf file.
+     * @param fontHeight Height in pixels for rendering each glyph.
+     * @return true on success, false on failure.
      */
-    int init(int width, int height, int cellWidth, int cellHeight);
+    bool initFont(const std::string& fontPath, int fontHeight);
 
     /**
-     * @brief Converts an AsciiGrid to an RGB24 AVFrame ready for encoding.
-     * @param grid The ASCII grid (characters + colors)
-     * @return AVFrame* (RGB24). You own the frame and must free it.
+     * @brief Initializes the output AVFrame dimensions and buffer.
+     *
+     * @param cols Number of character columns.
+     * @param rows Number of character rows.
+     * @param blockWidth Pixel width of each character cell.
+     * @param blockHeight Pixel height of each character cell.
+     * @return true on success, false on failure.
+     */
+    bool initFrame(int cols, int rows, int blockWidth, int blockHeight);
+
+    /**
+     * @brief Renders the ASCII grid with color to an AVFrame.
+     *
+     * @param grid AsciiGrid containing characters and RGB values.
+     * @return AVFrame* pointing to the internal RGB frame.
      */
     AVFrame* render(const AsciiGrid& grid);
 
+    /**
+     * @brief Cleans up allocated frame, font, and buffers.
+     */
+    void cleanup();
+
 private:
-    int m_width, m_height;
-    int m_cellWidth, m_cellHeight;
+    // Font and glyph
+    uint8_t* m_fontBuffer;     ///< Raw font file buffer
+    unsigned char* m_bitmap;   ///< Temporary buffer for glyph bitmaps
+    void* m_fontInfo;          ///< Opaque pointer to font info (stbtt_fontinfo*)
+
+    float m_scale;             ///< Font scale computed from pixel height
+    int m_ascent;              ///< Font ascent in pixels
+
+    // Frame output
+    AVFrame* m_frame;          ///< Output RGB frame
+    uint8_t* m_frameBuffer;    ///< Buffer backing AVFrame
+    int m_frameWidth;          ///< Full frame width (cols * blockWidth)
+    int m_frameHeight;         ///< Full frame height (rows * blockHeight)
+
+    int m_blockWidth;          ///< Width of a single glyph block
+    int m_blockHeight;         ///< Height of a single glyph block
+
+    bool loadFont(const std::string& path);
+    void drawGlyph(char c, int x, int y, RGB color);
 };
-}
+
+} // namespace AsciiVideoFilter
