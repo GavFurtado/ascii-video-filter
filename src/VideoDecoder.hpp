@@ -40,11 +40,23 @@ public:
      */
     bool readFrame(AVFrame* out_frame);
 
+    /**
+     * @brief Reads the next packet from the input audio stream.
+     * @param outPacket Packet to be filled with raw (compressed) audio data.
+     * @return true if a packet was read successfully, false if end of stream or failure.
+     */
+    bool readNextAudioPacket(AVPacket* outPacket);
+
     // Getters for video stream properties. Returns 0 or AV_PIX_FMT_NONE if context is not open.
     int getWidth() const { return m_codecContext ? m_codecContext->width : 0; }
     int getHeight() const { return m_codecContext ? m_codecContext->height : 0; }
     AVPixelFormat getPixelFormat() const { return m_codecContext ? m_codecContext->pix_fmt : AV_PIX_FMT_NONE; }
     AVRational getTimeBase() const { return m_formatContext && m_videoStreamIndex != -1 ? m_formatContext->streams[m_videoStreamIndex]->time_base : av_make_q(0, 1); }
+    int getAudioStreamIndex() const { return m_audioStreamIndex; }
+    AVStream* getAudioStream() const { return m_audioStream; }
+
+    bool hasAudio() const { return m_audioStreamIndex != -1; }
+
 
     /**
      * @brief Gets comprehensive video metadata for encoding.
@@ -60,6 +72,10 @@ private:
     int m_videoStreamIndex;
 
     VideoMetadata m_metadata; ///< Cached metadata populated during open()
+
+    // audio stream for remuxing into the output
+    AVStream *m_audioStream = nullptr;
+    int m_audioStreamIndex = -1;
 
     // Private helpers
     // cleans up resources (called by destructor and on error in open())

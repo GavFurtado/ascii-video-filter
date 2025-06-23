@@ -1,5 +1,5 @@
 #pragma once
-#include "src/Application.h"
+#include "src/Application.hpp"
 
 
 int main(int argc, const char *argv[]) {

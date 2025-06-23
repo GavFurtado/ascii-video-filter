@@ -117,6 +117,16 @@ int VideoDecoder::open(const std::string& filename) {
     // populate m_metadata
     populateMetadata();
 
+    // 6. Manually search for audio stream (Extra for remuxing audio stream in output)
+    for (unsigned i = 0; i < m_formatContext->nb_streams; ++i) {
+        AVStream* stream = m_formatContext->streams[i];
+        if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            m_audioStreamIndex = i;
+            m_audioStream = stream;
+            break;
+        }
+    }
+
     return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS); // Indicate success using our enum
 }
 
