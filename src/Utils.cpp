@@ -1,6 +1,6 @@
 #include <algorithm> // For std::transform
 #include <cctype>    // For std::tolower
-#include "Utils.h"
+#include "Utils.hpp"
 
 namespace AsciiVideoFilter {
 namespace Utils {

@@ -1,6 +1,6 @@
-#include "AsciiRenderer.h"
+#include "AsciiRenderer.hpp"
+#include "Utils.hpp"
 #include "stb_truetype.h"
-#include "Utils.h"
 
 #include <fstream>
 #include <iostream>

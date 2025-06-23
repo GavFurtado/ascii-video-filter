@@ -1,5 +1,5 @@
-#include "VideoDecoder.h"
-#include "Utils.h" // AppErrorCode
+#include "VideoDecoder.hpp"
+#include "Utils.hpp" // AppErrorCode
 #include <iostream>
 
 extern "C" {

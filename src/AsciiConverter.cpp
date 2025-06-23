@@ -1,8 +1,7 @@
-#include "AsciiConverter.h"
-#include "Utils.h" // AppErrorCode
+#include "AsciiConverter.hpp"
+#include "Utils.hpp" // AppErrorCode
 #include <iostream>
 #include <libswscale/swscale.h>
-#include <sstream>
 #include <cmath>
 
 extern "C" {
@@ -43,13 +42,13 @@ void AsciiConverter::cleanup() {
 }
 
 int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fmt,
-                         int ascii_block_width, int ascii_block_height) {
+                         int asciiBlockWidth, int asciiBlockHeight) {
     cleanup();
 
     m_srcWidth = src_width;
     m_srcHeight = src_height;
-    m_blockWidth = ascii_block_width;
-    m_blockHeight = ascii_block_height;
+    m_blockWidth = asciiBlockWidth;
+    m_blockHeight = asciiBlockWidth;
 
     // Initialize SwsContext for converting to RGB24
     m_swsContext = sws_getContext(m_srcWidth, m_srcHeight, src_pix_fmt,

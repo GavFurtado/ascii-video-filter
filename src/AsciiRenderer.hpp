@@ -1,8 +1,7 @@
 #pragma once
 
 #include <string>
-#include <vector>
-#include "AsciiTypes.h"
+#include "AsciiTypes.hpp"
 
 extern "C" {
     #include <libavutil/frame.h>
