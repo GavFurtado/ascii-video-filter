@@ -1,10 +1,31 @@
  #pragma once
 
+#include <cstdint>
+#include <libavutil/rational.h>
 #include <string>
 #include <vector>
 #include <filesystem>
 
 namespace AsciiVideoFilter {
+// Video metadata structure to pass between decoder and encoder
+struct VideoMetadata {
+    int width = 0;              ///< Video width in pixels
+    int height = 0;             ///< Video height in pixels
+    AVRational timeBase = {0, 1}; ///< Time base (fps = 1/timeBase)
+    AVRational frameRate = {0, 1}; ///< Frame rate
+    int64_t duration = 0;       ///< Duration in timebase units
+    int64_t bitRate = 0;        ///< Original bitrate (for reference)
+    double durationSeconds = 0.0; ///< Duration in seconds
+
+    // Computed properties
+    double getFps() const {
+        return frameRate.den > 0 ? static_cast<double>(frameRate.num) / frameRate.den : 0.0;
+    }
+
+    int64_t getTotalFrames() const {
+        return static_cast<int64_t>(durationSeconds * getFps());
+    }
+};
 
 // Custom application-specific error codes
 enum AppErrorCode {

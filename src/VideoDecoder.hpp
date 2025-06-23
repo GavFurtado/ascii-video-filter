@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Utils.hpp"
+
 #include <libavcodec/codec.h>
 #include <string>
 
@@ -44,6 +46,11 @@ public:
     AVPixelFormat getPixelFormat() const { return m_codecContext ? m_codecContext->pix_fmt : AV_PIX_FMT_NONE; }
     AVRational getTimeBase() const { return m_formatContext && m_videoStreamIndex != -1 ? m_formatContext->streams[m_videoStreamIndex]->time_base : av_make_q(0, 1); }
 
+    /**
+     * @brief Gets comprehensive video metadata for encoding.
+     * @return VideoMetadata struct with all timing and format info.
+     */
+    VideoMetadata getMetadata() const { return m_metadata; }
 
 private:
     // FFmpeg contexts and pointers
@@ -52,8 +59,13 @@ private:
     AVPacket *m_packet;
     int m_videoStreamIndex;
 
-    // Private helper to clean up resources (called by destructor and on error in open())
+    VideoMetadata m_metadata; ///< Cached metadata populated during open()
+
+    // Private helpers
+    // cleans up resources (called by destructor and on error in open())
     void cleanup();
+    // populates m_metadata (called by open())
+    void populateMetadata();
 
     VideoDecoder(const VideoDecoder&) = delete; // Disable copy constructor
     VideoDecoder& operator=(const VideoDecoder&) = delete; // Disable operator= overload

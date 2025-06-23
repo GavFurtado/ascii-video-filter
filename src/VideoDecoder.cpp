@@ -114,7 +114,38 @@ int VideoDecoder::open(const std::string& filename) {
               << ", Resolution: " << m_codecContext->width << "x" << m_codecContext->height
               << ", Pixel Format: " << (pix_fmt_name ? pix_fmt_name : "unknown") << "\n";
 
+    // populate m_metadata
+    populateMetadata();
+
     return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS); // Indicate success using our enum
+}
+
+void VideoDecoder::populateMetadata() {
+    if (!m_formatContext || m_videoStreamIndex < 0) {
+        return;
+    }
+
+    AVStream* stream = m_formatContext->streams[m_videoStreamIndex];
+
+    m_metadata.width = m_codecContext->width;
+    m_metadata.height = m_codecContext->height;
+    m_metadata.timeBase = stream->time_base;
+    m_metadata.frameRate = stream->avg_frame_rate;
+    m_metadata.duration = stream->duration;
+    m_metadata.bitRate = m_codecContext->bit_rate;
+
+    // Calculate duration in seconds
+    if (m_metadata.duration > 0) {
+        m_metadata.durationSeconds = m_metadata.duration * av_q2d(m_metadata.timeBase);
+    } else if (m_formatContext->duration > 0) {
+        // Fallback to format context duration
+        m_metadata.durationSeconds = m_formatContext->duration / static_cast<double>(AV_TIME_BASE);
+    }
+
+    std::cout << "Video metadata: " << m_metadata.width << "x" << m_metadata.height
+              << ", " << m_metadata.getFps() << "fps"
+              << ", " << m_metadata.durationSeconds << "s"
+              << ", " << m_metadata.getTotalFrames() << " frames\n";
 }
 
 bool VideoDecoder::readFrame(AVFrame* out_frame) {
