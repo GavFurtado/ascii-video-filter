@@ -1,8 +1,8 @@
 #pragma once
 
 #include <string>
-#include "AsciiTypes.h"  // Defines RGB and AsciiGrid structures
 
+#include "AsciiTypes.h"  // Defines RGB and AsciiGrid structures
 extern "C" {
     #include <libavutil/frame.h>     ///< AVFrame for decoded frames
     #include <libswscale/swscale.h>  ///< SwsContext for color space conversion

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include "AsciiTypes.h"
 
 extern "C" {
@@ -27,9 +28,9 @@ public:
      *
      * @param fontPath Path to a .ttf file.
      * @param fontHeight Height in pixels for rendering each glyph.
-     * @return true on success, false on failure.
+     * @return 0 on success, or negative FFmpeg/AppErrorCode on failure.
      */
-    bool initFont(const std::string& fontPath, int fontHeight);
+    int initFont(const std::string& fontPath, int fontHeight);
 
     /**
      * @brief Initializes the output AVFrame dimensions and buffer.
@@ -38,9 +39,9 @@ public:
      * @param rows Number of character rows.
      * @param blockWidth Pixel width of each character cell.
      * @param blockHeight Pixel height of each character cell.
-     * @return true on success, false on failure.
+     * @return 0 on success, or negative FFmpeg/AppErrorCode on failure.
      */
-    bool initFrame(int cols, int rows, int blockWidth, int blockHeight);
+    int initFrame(int cols, int rows, int blockWidth, int blockHeight);
 
     /**
      * @brief Renders the ASCII grid with color to an AVFrame.

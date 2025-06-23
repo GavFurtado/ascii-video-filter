@@ -33,6 +33,7 @@ const char* getAppErrorString(int errnum) {
         case APP_ERR_DECODER_NOT_FOUND: return "FFmpeg decoder not found for stream";
         case APP_ERR_CONVERTER_INIT_FAILED: return "ASCII converter initialization failed";
         case APP_ERR_FRAME_CONVERSION_FAILED: return "Frame to ASCII conversion failed";
+        case APP_ERR_FONT_LOAD_FAILED: return "Loading font failed";
         default: return "Unknown application error";
     }
 }
