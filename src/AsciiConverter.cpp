@@ -2,6 +2,7 @@
 #include "Utils.h" // AppErrorCode
 #include <iostream>
 #include <libswscale/swscale.h>
+#include <sstream>
 #include <cmath>
 
 extern "C" {

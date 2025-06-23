@@ -1,6 +1,7 @@
 #pragma once
 #include "src/Application.h"
 
+
 int main(int argc, const char *argv[]) {
     AsciiVideoFilter::Application app;
 
