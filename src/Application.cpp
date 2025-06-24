@@ -1,9 +1,9 @@
 #include "Application.hpp"
-
 #include "VideoDecoder.hpp"
 #include "VideoEncoder.hpp"
 #include "AsciiConverter.hpp"
 #include "AsciiRenderer.hpp"
+#include "Utils.hpp"
 #include <string>
 
 extern "C" {
@@ -39,18 +39,9 @@ int Application::run(int argc, const char *argv[]) {
         return 1;
     }
 
-    VideoEncoder encoder;
-    if (encoder.init(outputPath, decoder.getMetadata(), decoder.getWidth(), decoder.getHeight(), 400000) < 0) {
-        std::cerr << "Failed to initialize video encoder.\n";
-        return 1;
-    }
-
-    if (decoder.hasAudio()) {
-        encoder.addAudioStreamFrom(decoder.getAudioStream());
-    }
-
     AsciiConverter converter;
-    converter.init(decoder.getWidth(), decoder.getHeight(), decoder.getPixelFormat());
+    converter.setAsciiCharset(" .'`^,:;Il!i><~+_-?][}{1)(|\\/tfjrxnumbroCLJVUNYXOZmwqpdbkhao*#MW&8%B@$");
+    converter.init(decoder.getWidth(), decoder.getHeight(), decoder.getPixelFormat(), 8, 16);
     
     AVFrame* inFrame = av_frame_alloc();
     if (!inFrame) {
@@ -61,10 +52,28 @@ int Application::run(int argc, const char *argv[]) {
     AsciiRenderer renderer;
     renderer.initFont(ttfFontPath, converter.getBlockHeight());
 
-    while (decoder.readFrame(inFrame)) {
+    VideoEncoder encoder;
+    if (encoder.init(outputPath, decoder.getMetadata(), decoder.getWidth(), decoder.getHeight(), 400000) < 0) {
+        std::cerr << "Failed to initialize video encoder.\n";
+        return 1;
+    }
+    if (decoder.hasAudio()) {
+        encoder.addAudioStreamFrom(decoder.getAudioStream());
+    }
+
+    int maxFrames = 132;
+    int frameCount = 0;
+    while (frameCount < maxFrames && decoder.readFrame(inFrame)) {
         AsciiGrid grid = converter.convert(inFrame);
         renderer.initFrame(grid.cols, grid.rows, converter.getBlockWidth(), converter.getBlockHeight());
+
+        auto start = std::chrono::steady_clock::now();
         AVFrame* renderedFrame = renderer.render(grid);
+        auto end = std::chrono::steady_clock::now();
+
+        #ifdef DEBUG
+            std::cout << "Frame: " << frameCount << " Render time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms\n";
+        #endif // DEBUG
 
         if (!renderedFrame) {
             std::cerr << "Rendering failed.\n";
@@ -77,23 +86,34 @@ int Application::run(int argc, const char *argv[]) {
         }
 
         av_frame_unref(inFrame);
+        frameCount++;
     }
+
+    LOG("Reached frame rendering loop exit.\n") ;
 
     encoder.finalize();
 
-    // remux the audio stream if exists
-    if (decoder.hasAudio()) {
-        AVPacket* pkt = av_packet_alloc();
-        if (!pkt) {
-            std::cerr << "Failed to allocate audio packet.\n";
-        } else {
-            while (decoder.readNextAudioPacket(pkt)) {
-                encoder.writeAudioPacket(pkt);
-                av_packet_unref(pkt);
-            }
-            av_packet_free(&pkt);
-        }
-    }
+    LOG("encoder.finalize executed.\n");
+
+    // int count = 0;
+    //
+    // std::cout<< "Remuxxing audio stream.\n";
+    // // remux the audio stream if exists
+    // if (decoder.hasAudio()) {
+    //     AVPacket* pkt = av_packet_alloc();
+    //     LOG("Loop Counter: %d\n", count);
+    //
+    //     if (!pkt) {
+    //         std::cerr << "Failed to allocate audio packet.\n";
+    //     } else {
+    //         while (decoder.readNextAudioPacket(pkt)) {
+    //             encoder.writeAudioPacket(pkt);
+    //             av_packet_unref(pkt);
+    //         }
+    //         av_packet_free(&pkt);
+    //     }
+    //     count++;
+    // }
 
     av_frame_free(&inFrame);
     return 0;

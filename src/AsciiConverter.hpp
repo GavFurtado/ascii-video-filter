@@ -67,7 +67,7 @@ public:
      *
      * @param charset A non-empty string of characters used to represent brightness levels.
      */
-    void setAsciiCharset(const std::string& charset);
+    void setAsciiCharset(const std::string& charset) { m_asciiChars = charset; }
 
     // Getters
     int getBlockHeight() { return m_blockHeight; }

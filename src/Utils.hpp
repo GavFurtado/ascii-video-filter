@@ -52,3 +52,9 @@ const char* getAppErrorString(int errnum);
 
 } // namespace Utils
 } // namespace AsciiVideoFilter
+
+#ifdef DEBUG
+    #define LOG(...) fprintf(stderr, __VA_ARGS__)
+#else
+    #define LOG(...) ((void)0)
+#endif
