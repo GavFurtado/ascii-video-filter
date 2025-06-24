@@ -144,6 +144,8 @@ void VideoDecoder::populateMetadata() {
     m_metadata.duration = stream->duration;
     m_metadata.bitRate = m_codecContext->bit_rate;
 
+    LOG("DEBUG: Populated metadata.frameRate: %d/%d\n", m_metadata.frameRate.num, m_metadata.frameRate.den);
+
     // Calculate duration in seconds
     if (m_metadata.duration > 0) {
         m_metadata.durationSeconds = m_metadata.duration * av_q2d(m_metadata.timeBase);
@@ -174,33 +176,60 @@ bool VideoDecoder::readNextAudioPacket(AVPacket* outPacket) {
 }
 
 bool VideoDecoder::readFrame(AVFrame* out_frame) {
-    // Decoder should've already set all these fields if it worked correctly
     if (!m_formatContext || !m_codecContext || !m_packet || !out_frame) {
         std::cerr << "Error (VideoDecoder::readFrame): Decoder not properly initialized.\n";
         return false; // Indicate failure
     }
 
     int ret;
-    // Loop to ensure we get a decoded frame, even if we read multiple packets
+    // Flag to indicate if we have reached the end of the input file
+    bool reachedEOF = false;
+
     while (true) {
-        // NOTE: for the first frame this is always EAGAIN because no packets have been sent to the decoder yet
-        ret = avcodec_receive_frame(m_codecContext, out_frame); 
+        // Try to receive a frame from the decoder
+        ret = avcodec_receive_frame(m_codecContext, out_frame);
         if (ret == 0) {
             // Frame successfully received
             return true;
-        } else if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-            // Decoder needs more packets (EAGAIN) or has flushed all frames (EOF)
+        } else if (ret == AVERROR(EAGAIN)) {
+            // Decoder needs more packets. Proceed to read more if not at EOF.
+            if (reachedEOF) {
+                // If we've already sent the flush packet and received EAGAIN,
+                // it means there are no more frames to output.
+                return false;
+            }
+        } else if (ret == AVERROR_EOF) {
+            // Decoder has flushed all frames. We are done with this stream.
+            return false;
+        } else {
+            // Other error occurred while receiving frame
+            std::cerr << "Error (VideoDecoder::readFrame): Error receiving frame from decoder: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
+            return false; // Critical error
+        }
 
-            // Read a new packet from the input file (av_read_frame() is a misleading function name)
+        // If we reached here, it means avcodec_receive_frame returned EAGAIN
+        // (or it was the first call). We need to read more packets.
+        // If we've already hit EOF on reading packets, we should flush the decoder.
+
+        if (!reachedEOF) {
             ret = av_read_frame(m_formatContext, m_packet);
             if (ret < 0) {
                 if (ret != AVERROR_EOF) {
                     std::cerr << "Error (VideoDecoder::readFrame): Error reading packet: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
+                    // If a non-EOF error occurs while reading, we might as well stop.
+                    return false;
                 }
-                // Send a flush packet to the decoder to get any remaining frames
-                avcodec_send_packet(m_codecContext, nullptr); // Send null packet to flush
-                av_packet_unref(m_packet); // Clear the packet data
-                continue; // Try to receive flushed frames
+                // Reached end of file for input packets.
+                reachedEOF = true;
+                // Send a flush packet (nullptr) to the decoder to get any remaining frames.
+                // This is crucial to get out any frames that are delayed within the decoder.
+                ret = avcodec_send_packet(m_codecContext, nullptr);
+                if (ret < 0) {
+                    std::cerr << "Error (VideoDecoder::readFrame): Error sending flush packet to decoder: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
+                    return false;
+                }
+                // After sending flush, go back to try receiving frames.
+                continue;
             }
 
             // If the packet is from the video stream, send it for decoding
@@ -208,14 +237,16 @@ bool VideoDecoder::readFrame(AVFrame* out_frame) {
                 ret = avcodec_send_packet(m_codecContext, m_packet);
                 if (ret < 0) {
                     std::cerr << "Error (VideoDecoder::readFrame): Error sending packet to decoder: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
-                    av_packet_unref(m_packet);
+                    av_packet_unref(m_packet); // Ensure packet is unreferenced even on error
                     return false; // Error, cannot proceed
                 }
             }
             av_packet_unref(m_packet); // Packet data is consumed, unreference it
         } else {
-            std::cerr << "Error (VideoDecoder::readFrame): Error receiving frame from decoder: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
-            return false; // Critical error
+            // If we are already at the end of the file and still in this loop,
+            // it means avcodec_receive_frame previously returned EAGAIN
+            // after we sent the flush packet. This indicates no more frames will be produced.
+            return false;
         }
     }
 }

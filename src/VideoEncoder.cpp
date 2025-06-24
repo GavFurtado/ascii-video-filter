@@ -1,6 +1,7 @@
 #include "VideoEncoder.hpp"
 #include <iostream>
 #include <cstring>
+#include <libavutil/rational.h>
 
 extern "C" {
     #include <libavutil/avutil.h>
@@ -64,7 +65,6 @@ void VideoEncoder::cleanup() {
     m_videoStream = nullptr; // Freed with format context
     m_frameCount = 0;
 
-    m_audioStream = nullptr;
 }
 
 int VideoEncoder::init(const std::string& outputPath, const VideoMetadata& metadata,
@@ -115,8 +115,9 @@ int VideoEncoder::init(const std::string& outputPath, const VideoMetadata& metad
     m_codecContext->bit_rate = bitrate;
     m_codecContext->width = m_width;
     m_codecContext->height = m_height;
-    m_codecContext->time_base = m_timeBase;
-    m_codecContext->framerate = av_inv_q(m_timeBase); // fps = 1/timebase
+    m_codecContext->time_base = av_inv_q(metadata.frameRate);
+    LOG("DEBUG: VideoEncoder codecContext time_base set to: %d/%d\n", m_codecContext->time_base.num, m_codecContext->time_base.den);
+    m_codecContext->framerate = av_inv_q(metadata.timeBase); // fps = 1/timebase
     m_codecContext->pix_fmt = AV_PIX_FMT_YUV420P; // H.264 standard format
     m_codecContext->gop_size = 12; // Keyframe interval
     m_codecContext->max_b_frames = 1;
@@ -216,45 +217,68 @@ int VideoEncoder::init(const std::string& outputPath, const VideoMetadata& metad
     return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS);
 }
 
-int VideoEncoder::addAudioStreamFrom(AVStream* inputAudioStream) {
-    if (!m_formatContext || !inputAudioStream) {
-        return AVERROR(EINVAL);
+int VideoEncoder::addAudioStreamFrom(AVStream* inAudioStream) {
+    if (!m_formatContext || !inAudioStream) {
+        std::cerr << "Error (VideoEncoder::addAudioStreamFrom): Output format context or input audio stream is null.\n";
+        return -1;
     }
 
-    m_audioStream = avformat_new_stream(m_formatContext, nullptr);
-    if (!m_audioStream) {
-        std::cerr << "Error: Could not create audio stream in output.\n";
+    m_outputAudioStream = avformat_new_stream(m_formatContext, nullptr); // Create a new stream in the output context
+    if (!m_outputAudioStream) {
+        std::cerr << "Error (VideoEncoder::addAudioStreamFrom): Failed to allocate output audio stream.\n";
         return AVERROR(ENOMEM);
     }
 
-    int ret = avcodec_parameters_copy(m_audioStream->codecpar, inputAudioStream->codecpar);
+    m_outputAudioStream->id = m_formatContext->nb_streams - 1; // Assign an ID (typically one less than total streams)
+    m_outputAudioStreamIndex = m_outputAudioStream->id; // Store the index
+
+    // Copy codec parameters from input audio stream to output audio stream
+    int ret = avcodec_parameters_copy(m_outputAudioStream->codecpar, inAudioStream->codecpar);
     if (ret < 0) {
-        std::cerr << "Error: Failed to copy audio stream parameters.\n";
+        std::cerr << "Error (VideoEncoder::addAudioStreamFrom): Failed to copy audio codec parameters: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         return ret;
     }
 
-    m_audioStream->codecpar->codec_tag = 0;
-    m_audioStream->time_base = inputAudioStream->time_base;
-    m_audioStream->id = m_formatContext->nb_streams - 1;
+    // Set the codec tag if it's not set (important for some formats)
+    m_outputAudioStream->codecpar->codec_tag = 0;
 
-    return 0;
+    m_hasAudio = true;
+
+    LOG("Audio stream added to encoder. Output stream index: %d\n", m_outputAudioStreamIndex);
+    return 0; // Success
 }
 
-int VideoEncoder::writeAudioPacket(AVPacket* pkt) {
-    if (!m_audioStream || !pkt) return AVERROR(EINVAL);
-
-    // Rescale timestamps to match the output stream's time_base
-    av_packet_rescale_ts(pkt,
-                         m_formatContext->streams[pkt->stream_index]->time_base,
-                         m_audioStream->time_base);
-
-    pkt->stream_index = m_audioStream->index;
-
-    int ret = av_interleaved_write_frame(m_formatContext, pkt);
-    if (ret < 0) {
-        std::cerr << "Error: Failed to write audio packet: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
+int VideoEncoder::writeAudioPacket(AVPacket *packet) {
+    if (!m_formatContext || !m_outputAudioStream || !m_hasAudio) { // Check m_hasAudio flag
+        // This means encoder was not setup for audio, or audio stream addition failed
+        // This should probably be an error, or caught earlier.
+        std::cerr << "Error (VideoEncoder::writeAudioPacket): Encoder not configured for audio or output audio stream not valid.\n";
+        return -1;
     }
-    return ret;
+
+    // Crucial: Rescale PTS and DTS from the *input* audio stream's timebase
+    // to the *output* audio stream's timebase.
+    // The input packet's time_base is implicitly packet->time_base (which FFmpeg often sets to the stream's time_base)
+    // The source time_base for the packet is *the input audio stream's time base*.
+    // You need to get this from the decoder.
+    // For now, let's assume `packet->time_base` is correct if it came from `readNextAudioPacket`.
+
+    // NOTE: This assumes the input `packet->time_base` is correctly set by FFmpeg based on its source stream.
+    // If not, you'd need `av_packet_rescale_ts(packet, inAudioStream->time_base, m_outputAudioStream->time_base);`
+    // where `inAudioStream->time_base` is the timebase of the *original* audio stream from the decoder.
+    // Since `readNextAudioPacket` just reads raw packets, `packet->time_base` should be populated correctly.
+    av_packet_rescale_ts(packet, packet->time_base, m_outputAudioStream->time_base);
+
+
+    packet->stream_index = m_outputAudioStreamIndex; // Set to the *output* audio stream index
+
+    // Write the packet to the output file
+    int ret = av_interleaved_write_frame(m_formatContext, packet);
+    if (ret < 0) {
+        std::cerr << "Error (VideoEncoder::writeAudioPacket): Failed to write audio packet: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
+        return ret;
+    }
+    return 0;
 }
 
 int VideoEncoder::encodeFrame(AVFrame* frame) {
@@ -302,39 +326,47 @@ int VideoEncoder::finalize() {
     if (!m_codecContext || !m_formatContext) {
         return static_cast<int>(AppErrorCode::APP_ERR_CONVERTER_INIT_FAILED);
     }
-    
+
     // Flush encoder
     int ret = avcodec_send_frame(m_codecContext, nullptr);
     if (ret < 0) {
         std::cerr << "Error (VideoEncoder::finalize): Error flushing encoder: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         return ret;
     }
-    
-    // Receive remaining packets
-    while (ret >= 0) {
+
+    while (true) {
         ret = avcodec_receive_packet(m_codecContext, m_packet);
-        if (ret == AVERROR_EOF) {
-            break; // Done
-        } else if (ret < 0) {
+
+        if (ret == 0) { // Successfully received an encoded packet
+            // Write the packet to the output file
+            int write_ret = writePacket(m_packet); // writePacket is for video packets
+            if (write_ret < 0) {
+                std::cerr << "Error (VideoEncoder::finalize): Error writing flushed video packet: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, write_ret) << "\n";
+                av_packet_unref(m_packet); // Ensure packet is unreferenced even on error
+                break; // Stop processing if there's a write error
+            }
+            av_packet_unref(m_packet); // Unreference packet after successful writing
+
+        } else if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            // AVERROR(EAGAIN): Encoder needs more input (which won't be given after flush).
+            // This means there are no more packets currently available *from the encoder*,
+            // or all have been flushed.
+            // AVERROR_EOF: The encoder has no more output packets.
+            break; // Exit the loop, all packets are processed or no more will come.
+        } else {
+            // An actual error occurred during packet reception from the encoder
             std::cerr << "Error (VideoEncoder::finalize): Error receiving final packets: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
-            return ret;
+            break; // Stop on receive error
         }
-        
-        ret = writePacket(m_packet);
-        if (ret < 0) {
-            return ret;
-        }
-        
-        av_packet_unref(m_packet);
     }
-    
+
     // Write file trailer
     ret = av_write_trailer(m_formatContext);
     if (ret < 0) {
         std::cerr << "Error (VideoEncoder::finalize): Error writing trailer: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         return ret;
     }
-    
+
     std::cout << "Encoding completed. Total frames: " << m_frameCount << "\n";
     return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS);
 }

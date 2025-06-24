@@ -99,6 +99,15 @@ private:
 
     AVStream* m_audioStream = nullptr;
 
+    bool m_hasAudio = false;
+
+    AVStream* m_outputVideoStream; // Pointer to the video stream in m_formatContext (output)
+    AVStream* m_outputAudioStream; // Pointer to the audio stream in m_formatContext (output)
+    int m_outputVideoCodecId;      // Codec ID of the output video stream
+    int m_outputAudioCodecId;      // Codec ID of the output audio stream
+    int m_outputVideoStreamIndex;  // Index of the video stream in the output format context
+    int m_outputAudioStreamIndex;  // Index of the audio stream in the output format context
+
     /**
      * @brief Writes encoded packet to output file.
      */
