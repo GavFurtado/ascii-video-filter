@@ -53,6 +53,9 @@ int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fm
     m_blockWidth = asciiBlockWidth;
     m_blockHeight = asciiBlockWidth;
 
+    m_gridCols = src_width / m_blockWidth;
+    m_gridRows = src_height / m_blockHeight;
+
     // Initialize SwsContext for converting to RGB24
     m_swsContext = sws_getContext(m_srcWidth, m_srcHeight, src_pix_fmt,
                                   m_srcWidth, m_srcHeight, AV_PIX_FMT_RGB24,
@@ -103,11 +106,9 @@ void AsciiConverter::convert(AVFrame* decodedFrame, AsciiGrid &outGrid) {
     sws_scale(m_swsContext, decodedFrame->data, decodedFrame->linesize, 0, decodedFrame->height,
               m_rgbFrame->data, m_rgbFrame->linesize);
 
-    // Compute number of ASCII rows and columns
-    outGrid.rows = m_srcHeight / m_blockHeight;
-    outGrid.cols = m_srcWidth / m_blockWidth;
-    outGrid.chars.resize(outGrid.rows, std::vector<char>(outGrid.cols));
-    outGrid.colours.resize(outGrid.rows, std::vector<RGB>(outGrid.cols));
+    // Ensure outGrid has correct dimensions (extra assignment)
+    outGrid.cols = m_gridCols; 
+    outGrid.rows = m_gridRows;
 
     // Loop through each ASCII block (row by row, column by column)
     for (int blockY = 0; blockY < outGrid.rows; ++blockY) {

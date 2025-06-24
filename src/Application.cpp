@@ -86,9 +86,14 @@ int Application::run(int argc, const char *argv[]) {
         encoder.addAudioStreamFrom(decoder.getAudioStream());
     }
 
+    AsciiGrid grid;
+    grid.cols = converter.getGridCols();
+    grid.rows = converter.getGridRows();
+    grid.chars.assign(grid.rows, std::vector<char>(grid.cols));
+    grid.colours.assign(grid.rows, std::vector<RGB>(grid.cols));
+
     int frameCount = 0;
     while (decoder.readFrame(inFrame) && (MAX_FRAMES == -1 || frameCount < MAX_FRAMES)) {
-        AsciiGrid grid;
         converter.convert(inFrame, grid);
         renderer.initFrame(videoWidth, videoHeight, converter.getBlockWidth(), converter.getBlockHeight());
 

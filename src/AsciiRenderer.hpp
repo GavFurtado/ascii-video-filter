@@ -56,6 +56,8 @@ public:
      */
     void cleanup();
 
+
+    
 private:
     char m_errbuf[AV_ERROR_MAX_STRING_SIZE];
     // Font and glyph

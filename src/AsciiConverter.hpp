@@ -72,6 +72,9 @@ public:
     // Getters
     int getBlockHeight() { return m_blockHeight; }
     int getBlockWidth() { return m_blockWidth; }
+    int getGridRows() const { return m_gridRows; }
+    int getGridCols() const { return m_gridCols; }
+
 
 private:
     char m_errbuf[AV_ERROR_MAX_STRING_SIZE];
@@ -83,6 +86,9 @@ private:
     int m_srcHeight;            ///< Height of source frame
     int m_blockWidth;           ///< Width of one ASCII character block in pixels
     int m_blockHeight;          ///< Height of one ASCII character block in pixels
+    
+    int m_gridCols;
+    int m_gridRows;
 
     std::string m_asciiChars;   ///< Characters used for brightness-to-ASCII mapping
 
