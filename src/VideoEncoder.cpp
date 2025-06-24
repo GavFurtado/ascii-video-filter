@@ -80,7 +80,7 @@ int VideoEncoder::init(const std::string& outputPath, const VideoMetadata& metad
     // 1. Allocate output format context
     ret = avformat_alloc_output_context2(&m_formatContext, nullptr, "mp4", outputPath.c_str());
     if (ret < 0 || !m_formatContext) {
-        std::cerr << "Error (VideoEncoder::init): Could not create output context: " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoEncoder::init): Could not create output context: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         cleanup();
         return ret; // ffmpeg err code
     }
@@ -133,7 +133,7 @@ int VideoEncoder::init(const std::string& outputPath, const VideoMetadata& metad
     // 6. Open codec
     ret = avcodec_open2(m_codecContext, codec, nullptr);
     if (ret < 0) {
-        std::cerr << "Error (VideoEncoder::init): Could not open codec: " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoEncoder::init): Could not open codec: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         cleanup();
         return ret;
     }
@@ -141,7 +141,7 @@ int VideoEncoder::init(const std::string& outputPath, const VideoMetadata& metad
     // 7. Copy codec parameters to stream
     ret = avcodec_parameters_from_context(m_videoStream->codecpar, m_codecContext);
     if (ret < 0) {
-        std::cerr << "Error (VideoEncoder::init): Could not copy codec parameters: " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoEncoder::init): Could not copy codec parameters: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         cleanup();
         return ret;
     }
@@ -149,7 +149,7 @@ int VideoEncoder::init(const std::string& outputPath, const VideoMetadata& metad
     // 8. Open output file
     ret = avio_open(&m_formatContext->pb, outputPath.c_str(), AVIO_FLAG_WRITE);
     if (ret < 0) {
-        std::cerr << "Error (VideoEncoder::init): Could not open output file '" << outputPath << "': " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoEncoder::init): Could not open output file '" << outputPath << "': " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         cleanup();
         return ret;
     }
@@ -157,7 +157,7 @@ int VideoEncoder::init(const std::string& outputPath, const VideoMetadata& metad
     // 9. Write file header
     ret = avformat_write_header(m_formatContext, nullptr);
     if (ret < 0) {
-        std::cerr << "Error (VideoEncoder::init): Error writing header: " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoEncoder::init): Error writing header: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         cleanup();
         return ret;
     }
@@ -252,7 +252,7 @@ int VideoEncoder::writeAudioPacket(AVPacket* pkt) {
 
     int ret = av_interleaved_write_frame(m_formatContext, pkt);
     if (ret < 0) {
-        std::cerr << "Error: Failed to write audio packet: " << av_err2str(ret) << "\n";
+        std::cerr << "Error: Failed to write audio packet: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
     }
     return ret;
 }
@@ -273,7 +273,7 @@ int VideoEncoder::encodeFrame(AVFrame* frame) {
     // Send frame to encoder
     int ret = avcodec_send_frame(m_codecContext, m_yuvFrame);
     if (ret < 0) {
-        std::cerr << "Error (VideoEncoder::encodeFrame): Error sending frame to encoder: " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoEncoder::encodeFrame): Error sending frame to encoder: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         return ret;
     }
     
@@ -283,7 +283,7 @@ int VideoEncoder::encodeFrame(AVFrame* frame) {
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
             break; // Need more frames or done
         } else if (ret < 0) {
-            std::cerr << "Error (VideoEncoder::encodeFrame): Error receiving packet: " << av_err2str(ret) << "\n";
+            std::cerr << "Error (VideoEncoder::encodeFrame): Error receiving packet: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
             return ret;
         }
         
@@ -306,7 +306,7 @@ int VideoEncoder::finalize() {
     // Flush encoder
     int ret = avcodec_send_frame(m_codecContext, nullptr);
     if (ret < 0) {
-        std::cerr << "Error (VideoEncoder::finalize): Error flushing encoder: " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoEncoder::finalize): Error flushing encoder: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         return ret;
     }
     
@@ -316,7 +316,7 @@ int VideoEncoder::finalize() {
         if (ret == AVERROR_EOF) {
             break; // Done
         } else if (ret < 0) {
-            std::cerr << "Error (VideoEncoder::finalize): Error receiving final packets: " << av_err2str(ret) << "\n";
+            std::cerr << "Error (VideoEncoder::finalize): Error receiving final packets: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
             return ret;
         }
         
@@ -331,7 +331,7 @@ int VideoEncoder::finalize() {
     // Write file trailer
     ret = av_write_trailer(m_formatContext);
     if (ret < 0) {
-        std::cerr << "Error (VideoEncoder::finalize): Error writing trailer: " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoEncoder::finalize): Error writing trailer: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         return ret;
     }
     
@@ -347,7 +347,7 @@ int VideoEncoder::writePacket(AVPacket* packet) {
     // Write packet to output file
     int ret = av_interleaved_write_frame(m_formatContext, packet);
     if (ret < 0) {
-        std::cerr << "Error (VideoEncoder::writePacket): Error writing packet: " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoEncoder::writePacket): Error writing packet: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         return ret;
     }
     

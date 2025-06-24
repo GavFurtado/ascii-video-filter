@@ -69,6 +69,7 @@ public:
     void setAsciiCharset(const std::string& charset);
 
 private:
+    char m_errbuf[AV_ERROR_MAX_STRING_SIZE];
     SwsContext *m_swsContext;   ///< Used to convert from input format to RGB24
     AVFrame *m_rgbFrame;        ///< Internal RGB24 frame buffer
     uint8_t *m_rgbBuffer;       ///< Buffer for RGB image data

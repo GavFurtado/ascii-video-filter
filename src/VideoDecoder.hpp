@@ -3,6 +3,7 @@
 #include "Utils.hpp"
 
 #include <libavcodec/codec.h>
+#include <libavutil/error.h>
 #include <string>
 
 extern "C" {
@@ -65,6 +66,7 @@ public:
     VideoMetadata getMetadata() const { return m_metadata; }
 
 private:
+    char m_errbuf[AV_ERROR_MAX_STRING_SIZE];
     // FFmpeg contexts and pointers
     AVFormatContext *m_formatContext;
     AVCodecContext *m_codecContext;

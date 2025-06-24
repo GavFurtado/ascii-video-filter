@@ -1,5 +1,6 @@
 #pragma once
 
+#include <libavutil/error.h>
 #include <string>
 #include "AsciiTypes.hpp"
 
@@ -56,6 +57,7 @@ public:
     void cleanup();
 
 private:
+    char m_errbuf[AV_ERROR_MAX_STRING_SIZE];
     // Font and glyph
     uint8_t* m_fontBuffer;     ///< Raw font file buffer
     unsigned char* m_bitmap;   ///< Temporary buffer for glyph bitmaps

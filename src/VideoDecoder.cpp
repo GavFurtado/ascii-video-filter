@@ -48,7 +48,7 @@ int VideoDecoder::open(const std::string& filename) {
     // 1. Open input file
     ret = avformat_open_input(&m_formatContext, filename.c_str(), nullptr, nullptr);
     if (ret < 0) {
-        std::cerr << "Error (VideoDecoder::open): Could not open input file '" << filename << "': " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoDecoder::open): Could not open input file '" << filename << "': " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         cleanup();
         return ret; // FFmpeg error code
     }
@@ -56,7 +56,7 @@ int VideoDecoder::open(const std::string& filename) {
     // 2. Find stream information
     ret = avformat_find_stream_info(m_formatContext, nullptr);
     if (ret < 0) {
-        std::cerr << "Error (VideoDecoder::open): Could not find stream information: " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoDecoder::open): Could not find stream information: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         cleanup();
         return ret;
     }
@@ -82,21 +82,21 @@ int VideoDecoder::open(const std::string& filename) {
 
     m_codecContext = avcodec_alloc_context3(codec);
     if (!m_codecContext) {
-        std::cerr << "Error (VideoDecoder::open): Could not allocate codec context: " << av_err2str(AVERROR(ENOMEM)) << "\n";
+        std::cerr << "Error (VideoDecoder::open): Could not allocate codec context: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, AVERROR(ENOMEM)) << "\n";
         cleanup();
         return AVERROR(ENOMEM); // FFmpeg memory error
     }
 
     ret = avcodec_parameters_to_context(m_codecContext, codec_params);
     if (ret < 0) {
-        std::cerr << "Error (VideoDecoder::open): Could not copy codec parameters to context: " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoDecoder::open): Could not copy codec parameters to context: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         cleanup();
         return ret;
     }
 
     ret = avcodec_open2(m_codecContext, codec, nullptr);
     if (ret < 0) {
-        std::cerr << "Error (VideoDecoder::open): Could not open codec: " << av_err2str(ret) << "\n";
+        std::cerr << "Error (VideoDecoder::open): Could not open codec: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         cleanup();
         return ret;
     }
@@ -104,7 +104,7 @@ int VideoDecoder::open(const std::string& filename) {
     // 5. Allocate AVPacket for reading data
     m_packet = av_packet_alloc();
     if (!m_packet) {
-        std::cerr << "Error (VideoDecoder::open): Could not allocate AVPacket: " << av_err2str(AVERROR(ENOMEM)) << "\n";
+        std::cerr << "Error (VideoDecoder::open): Could not allocate AVPacket: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, AVERROR(ENOMEM)) << "\n";
         cleanup();
         return AVERROR(ENOMEM); // FFmpeg memory error
     }
@@ -117,7 +117,7 @@ int VideoDecoder::open(const std::string& filename) {
     // populate m_metadata
     populateMetadata();
 
-    // 6. Manually search for audio stream (Extra for remuxing audio stream in output)
+    // 6. Manually search for audio stream (remuxing audio stream in output)
     for (unsigned i = 0; i < m_formatContext->nb_streams; ++i) {
         AVStream* stream = m_formatContext->streams[i];
         if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
@@ -158,6 +158,21 @@ void VideoDecoder::populateMetadata() {
               << ", " << m_metadata.getTotalFrames() << " frames\n";
 }
 
+bool VideoDecoder::readNextAudioPacket(AVPacket* outPacket) {
+    if (!m_formatContext || m_audioStreamIndex == -1 || !outPacket) {
+        return false;
+    }
+
+    while (av_read_frame(m_formatContext, outPacket) >= 0) {
+        if (outPacket->stream_index == m_audioStreamIndex) {
+            return true; // got an audio packet
+        }
+        av_packet_unref(outPacket); // not audio, discard
+    }
+
+    return false; // end of file
+}
+
 bool VideoDecoder::readFrame(AVFrame* out_frame) {
     // Decoder should've already set all these fields if it worked correctly
     if (!m_formatContext || !m_codecContext || !m_packet || !out_frame) {
@@ -180,7 +195,7 @@ bool VideoDecoder::readFrame(AVFrame* out_frame) {
             ret = av_read_frame(m_formatContext, m_packet);
             if (ret < 0) {
                 if (ret != AVERROR_EOF) {
-                    std::cerr << "Error (VideoDecoder::readFrame): Error reading packet: " << av_err2str(ret) << "\n";
+                    std::cerr << "Error (VideoDecoder::readFrame): Error reading packet: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
                 }
                 // Send a flush packet to the decoder to get any remaining frames
                 avcodec_send_packet(m_codecContext, nullptr); // Send null packet to flush
@@ -192,14 +207,14 @@ bool VideoDecoder::readFrame(AVFrame* out_frame) {
             if (m_packet->stream_index == m_videoStreamIndex) {
                 ret = avcodec_send_packet(m_codecContext, m_packet);
                 if (ret < 0) {
-                    std::cerr << "Error (VideoDecoder::readFrame): Error sending packet to decoder: " << av_err2str(ret) << "\n";
+                    std::cerr << "Error (VideoDecoder::readFrame): Error sending packet to decoder: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
                     av_packet_unref(m_packet);
                     return false; // Error, cannot proceed
                 }
             }
             av_packet_unref(m_packet); // Packet data is consumed, unreference it
         } else {
-            std::cerr << "Error (VideoDecoder::readFrame): Error receiving frame from decoder: " << av_err2str(ret) << "\n";
+            std::cerr << "Error (VideoDecoder::readFrame): Error receiving frame from decoder: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
             return false; // Critical error
         }
     }

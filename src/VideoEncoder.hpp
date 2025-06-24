@@ -1,5 +1,6 @@
 #pragma once
 
+#include <libavutil/error.h>
 #include <string>
 #include "Utils.hpp"
 
@@ -78,6 +79,7 @@ public:
     int finalize();
 
 private:
+    char m_errbuf[AV_ERROR_MAX_STRING_SIZE];
     // FFmpeg encoding contexts
     AVFormatContext* m_formatContext;
     AVCodecContext* m_codecContext;

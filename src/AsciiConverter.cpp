@@ -1,5 +1,6 @@
 #include "AsciiConverter.hpp"
 #include "Utils.hpp" // AppErrorCode
+#include <cerrno>
 #include <iostream>
 #include <libswscale/swscale.h>
 #include <cmath>
@@ -63,7 +64,7 @@ int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fm
     // Allocate RGB frame and its buffer
     m_rgbFrame = av_frame_alloc();
     if (!m_rgbFrame) {
-        std::cerr << "Error (AsciiConverter::init): Could not allocate RGB AVFrame: " << av_err2str(AVERROR(ENOMEM)) << "\n";
+        std::cerr << "Error (AsciiConverter::init): Could not allocate RGB AVFrame: " <<  av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, AVERROR(ENOMEM))<< "\n";
         cleanup();
         return AVERROR(ENOMEM);
     }
@@ -71,7 +72,7 @@ int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fm
     int num_bytes = av_image_get_buffer_size(AV_PIX_FMT_RGB24, m_srcWidth, m_srcHeight, 1);
     m_rgbBuffer = (uint8_t *)av_malloc(num_bytes);
     if (!m_rgbBuffer) {
-        std::cerr << "Error (AsciiConverter::init): Could not allocate image buffer for RGB frame: " << av_err2str(AVERROR(ENOMEM)) << "\n";
+        std::cerr << "Error (AsciiConverter::init): Could not allocate image buffer for RGB frame: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, AVERROR(ENOMEM)) << "\n";
         cleanup();
         return AVERROR(ENOMEM);
     }

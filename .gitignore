@@ -3,3 +3,4 @@ compile_commands.json
 .cache/
 Testing/
 .git/
+obj/

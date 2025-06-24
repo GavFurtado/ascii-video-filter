@@ -14,6 +14,9 @@ extern "C" {
 
 namespace AsciiVideoFilter {
 
+Application::Application() {}
+Application::~Application() {}
+
 int Application::run(int argc, const char *argv[]) {
     // TODO: Better argument parsing. Current one very rudimentary
     // TODO: AppErrorCodes aren't setup right in recent parts of the codebase. Fix soon
@@ -52,6 +55,8 @@ int Application::run(int argc, const char *argv[]) {
         std::cerr << "Failed to allocate input frame.\n";
         return 1;
     }
+
+    // renderer isn't setup right
 
     while (decoder.readFrame(inFrame)) {
         AsciiGrid grid = converter.convert(inFrame);

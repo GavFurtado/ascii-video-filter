@@ -1,16 +1,20 @@
 #include "AsciiRenderer.hpp"
 #include "Utils.hpp"
-#include "stb_truetype.h"
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "../include/stb_truetype.h"
 
 #include <fstream>
 #include <iostream>
 #include <cstring> // for memset
 #include <cassert>
+#include <libavutil/error.h>
 
 extern "C" {
     #include <libavutil/imgutils.h>
     #include <libavutil/mem.h>
 }
+
 
 namespace AsciiVideoFilter {
 
@@ -105,7 +109,7 @@ int AsciiRenderer::initFrame(int cols, int rows, int blockWidth, int blockHeight
     // Allocate AVFrame structure
     m_frame = av_frame_alloc();
     if (!m_frame) {
-        std::cerr << "Failed to allocate AVFrame.\n";
+        std::cerr << "Error (AsciiRenderer::initFrame) Failed to allocate AVFrame: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, AVERROR(ENOMEM)) << "\n";
         return AVERROR(ENOMEM);  // Out of memory
     }
 
@@ -117,12 +121,12 @@ int AsciiRenderer::initFrame(int cols, int rows, int blockWidth, int blockHeight
     int bufferSize = av_image_get_buffer_size(AV_PIX_FMT_RGB24, m_frameWidth, m_frameHeight, 1);
     if (bufferSize < 0) {
         std::cerr << "Invalid image buffer size.\n";
-        return bufferSize;  // Already an FFmpeg-style error
+        return bufferSize;
     }
 
     m_frameBuffer = static_cast<uint8_t*>(av_malloc(bufferSize));
     if (!m_frameBuffer) {
-        std::cerr << "Failed to allocate AVFrame buffer.\n";
+        std::cerr << "Error (AsciiRenderer::initFrame) Failed to allocate AVFrame buffer: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, AVERROR(ENOMEM)) << "\n";
         return AVERROR(ENOMEM);
     }
 
@@ -130,7 +134,7 @@ int AsciiRenderer::initFrame(int cols, int rows, int blockWidth, int blockHeight
                                    m_frameWidth, m_frameHeight, 1);
     if (ret < 0) {
         std::cerr << "Failed to fill AVFrame image arrays.\n";
-        return ret;  
+        return ret;
     }
 
     std::memset(m_frameBuffer, 0, bufferSize);  // Clear to black

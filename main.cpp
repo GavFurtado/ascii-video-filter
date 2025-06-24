@@ -1,4 +1,3 @@
-#pragma once
 #include "src/Application.hpp"
 
 
@@ -8,3 +7,7 @@ int main(int argc, const char *argv[]) {
     // The run method handles all the application logic.
     return app.run(argc, argv);
 }
+
+
+
+
