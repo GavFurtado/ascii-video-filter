@@ -1,10 +1,10 @@
 #pragma once
 
-#include <libavutil/error.h>
 #include <string>
 #include "Utils.hpp"
 
 extern "C" {
+    #include <libavutil/error.h>
     #include <libavformat/avformat.h>
     #include <libavcodec/avcodec.h>
     #include <libavutil/frame.h>

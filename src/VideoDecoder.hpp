@@ -2,11 +2,11 @@
 
 #include "Utils.hpp"
 
-#include <libavcodec/codec.h>
-#include <libavutil/error.h>
 #include <string>
 
 extern "C" {
+    #include <libavcodec/codec.h>
+    #include <libavutil/error.h>
     #include <libavformat/avformat.h> // AVFormatContext, avformat_open_input, etc.
     #include <libavcodec/avcodec.h>   // AVCodecContext, avcodec_find_decoder, etc.
     #include <libavutil/frame.h>      // AVFrame

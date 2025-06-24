@@ -1,10 +1,13 @@
  #pragma once
 
 #include <cstdint>
-#include <libavutil/rational.h>
 #include <string>
 #include <vector>
 #include <filesystem>
+
+extern "C" {
+    #include <libavutil/rational.h>
+}
 
 namespace AsciiVideoFilter {
 // Video metadata structure to pass between decoder and encoder

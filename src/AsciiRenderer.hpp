@@ -1,10 +1,10 @@
 #pragma once
 
-#include <libavutil/error.h>
 #include <string>
 #include "AsciiTypes.hpp"
 
 extern "C" {
+    #include <libavutil/error.h>
     #include <libavutil/frame.h>
     #include <libavutil/pixfmt.h>
 }

@@ -3,6 +3,7 @@
 #include <string>
 
 #include "AsciiTypes.hpp"  // Defines RGB and AsciiGrid structures
+
 extern "C" {
     #include <libavutil/frame.h>     ///< AVFrame for decoded frames
     #include <libswscale/swscale.h>  ///< SwsContext for color space conversion

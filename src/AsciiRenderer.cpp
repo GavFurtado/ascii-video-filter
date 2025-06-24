@@ -1,16 +1,16 @@
 #include "AsciiRenderer.hpp"
 #include "Utils.hpp"
 
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "../include/stb_truetype.h"
 
 #include <fstream>
 #include <iostream>
 #include <cstring> // for memset
 #include <cassert>
-#include <libavutil/error.h>
+#define STB_TRUETYPE_IMPLEMENTATION
 
 extern "C" {
+    #include <libavutil/error.h>
+    #include "../include/stb_truetype.h"
     #include <libavutil/imgutils.h>
     #include <libavutil/mem.h>
 }
