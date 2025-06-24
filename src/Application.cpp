@@ -4,7 +4,9 @@
 #include "AsciiConverter.hpp"
 #include "AsciiRenderer.hpp"
 #include "Utils.hpp"
+
 #include <string>
+#include <unordered_map>
 
 extern "C" {
     #include <libavutil/frame.h>
@@ -22,8 +24,14 @@ int Application::run(int argc, const char *argv[]) {
     // TODO: Better argument parsing. Current one very rudimentary
     // TODO: AppErrorCodes aren't setup right in recent parts of the codebase. Fix soon
     // TODO: Actual Multithreaded Pipeline.
+    // TODO: fix memory leak (IMPIMPIMP)
 
-    const std::string ttfFontPath = "./assets/RobotoMono-Regular.ttf";
+
+    // Define a maximum frame count for testing purposes
+    // Set to -1 to process all frames
+    // const int MAX_FRAMES = 3;
+    const int MAX_FRAMES = -1;
+
     if (argc < 3) {
         std::cerr << "Usage: " << argv[0] << " <input_file> <output_file>\n";
         return 1;
@@ -31,7 +39,16 @@ int Application::run(int argc, const char *argv[]) {
 
     const std::string inputPath = argv[1];
     const std::string outputPath = argv[2];
-    
+
+    const std::string ttfFontPath = "./assets/RubikMonoOne-Regular.ttf";
+    const std::unordered_map<std::string, std::string> charPresets = {
+        {"standard", " .:-=+*#%@"},
+        {"detailed", " .'`^,:;Il!i><~+_-?][}{1)(|\\/tfjrxnumbroCLJVUNYXOZmwqpdbkhao*#MW&8%B@$"},
+        {"binary", " 01 "}
+        // {"dots", " .∙⬤⦿☉○●"}, // std::string doesn't do unicode so needs changes to work
+        // {"shapes", " ▫▪▩▨▧▦▥▤▣▢□■"}
+    };
+
 
     VideoDecoder decoder;
     if (decoder.open(inputPath) < 0) {
@@ -39,9 +56,12 @@ int Application::run(int argc, const char *argv[]) {
         return 1;
     }
 
+    int videoWidth = decoder.getWidth();
+    int videoHeight = decoder.getHeight();
+
     AsciiConverter converter;
-    converter.setAsciiCharset(" .'`^,:;Il!i><~+_-?][}{1)(|\\/tfjrxnumbroCLJVUNYXOZmwqpdbkhao*#MW&8%B@$");
-    converter.init(decoder.getWidth(), decoder.getHeight(), decoder.getPixelFormat(), 8, 16);
+    converter.setAsciiCharset(charPresets.at("detailed"));
+    converter.init(videoWidth, videoHeight, decoder.getPixelFormat(), 12, 36);
 
     AVFrame* inFrame = av_frame_alloc();
     if (!inFrame) {
@@ -50,28 +70,34 @@ int Application::run(int argc, const char *argv[]) {
     }
 
     AsciiRenderer renderer;
-    renderer.initFont(ttfFontPath, converter.getBlockHeight());
+    // Initialize AsciiRenderer's font
+    if (renderer.initFont(ttfFontPath, converter.getBlockHeight()) < 0) {
+        std::cerr << "Error: Failed to initialize ASCII renderer font. Exiting.\\n";
+        return static_cast<int>(AppErrorCode::APP_ERR_FONT_INIT_FAILED); 
+    }
 
     VideoEncoder encoder;
-    if (encoder.init(outputPath, decoder.getMetadata(), decoder.getWidth(), decoder.getHeight(), 400000) < 0) {
+    if (encoder.init(outputPath, decoder.getMetadata(), videoWidth, videoHeight, 400000) < 0) {
         std::cerr << "Failed to initialize video encoder.\n";
         return 1;
     }
+
     if (decoder.hasAudio()) {
         encoder.addAudioStreamFrom(decoder.getAudioStream());
     }
 
     int frameCount = 0;
-    while (decoder.readFrame(inFrame)) {
-        AsciiGrid grid = converter.convert(inFrame);
-        renderer.initFrame(grid.cols, grid.rows, converter.getBlockWidth(), converter.getBlockHeight());
+    while (decoder.readFrame(inFrame) && (MAX_FRAMES == -1 || frameCount < MAX_FRAMES)) {
+        AsciiGrid grid;
+        converter.convert(inFrame, grid);
+        renderer.initFrame(videoWidth, videoHeight, converter.getBlockWidth(), converter.getBlockHeight());
 
         auto start = std::chrono::steady_clock::now();
         AVFrame* renderedFrame = renderer.render(grid);
         auto end = std::chrono::steady_clock::now();
 
+        std::cout << "Frame: " << frameCount << " Render time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms\n";
         #ifdef DEBUG
-            std::cout << "Frame: " << frameCount << " Render time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms\n";
         #endif // DEBUG
 
         if (!renderedFrame) {
@@ -87,6 +113,7 @@ int Application::run(int argc, const char *argv[]) {
         av_frame_unref(inFrame);
         frameCount++;
     }
+    av_frame_free(&inFrame);
 
     LOG("Reached frame rendering loop exit.\n") ;
 
@@ -124,7 +151,6 @@ int Application::run(int argc, const char *argv[]) {
     }
 
     LOG("Audio Stream remuxxed into output file.\n");
-    av_frame_free(&inFrame);
 
     LOG("End\n");
     return 0;

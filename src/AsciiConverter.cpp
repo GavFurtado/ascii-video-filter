@@ -1,4 +1,5 @@
 #include "AsciiConverter.hpp"
+#include "AsciiTypes.hpp"
 #include "Utils.hpp" // AppErrorCode
 
 #include <cerrno>
@@ -91,12 +92,11 @@ int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fm
     return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS); 
 }
 
-AsciiGrid AsciiConverter::convert(AVFrame* decodedFrame) {
-    AsciiGrid grid;
+void AsciiConverter::convert(AVFrame* decodedFrame, AsciiGrid &outGrid) {
 
     if (!m_swsContext || !m_rgbFrame || !decodedFrame) {
         std::cerr << "Error (AsciiConverter::convert): Not properly initialized.\n";
-        return grid;
+        return;
     }
 
     // Convert input frame to RGB24 format
@@ -104,14 +104,14 @@ AsciiGrid AsciiConverter::convert(AVFrame* decodedFrame) {
               m_rgbFrame->data, m_rgbFrame->linesize);
 
     // Compute number of ASCII rows and columns
-    grid.rows = m_srcHeight / m_blockHeight;
-    grid.cols = m_srcWidth / m_blockWidth;
-    grid.chars.resize(grid.rows, std::vector<char>(grid.cols));
-    grid.colours.resize(grid.rows, std::vector<RGB>(grid.cols));
+    outGrid.rows = m_srcHeight / m_blockHeight;
+    outGrid.cols = m_srcWidth / m_blockWidth;
+    outGrid.chars.resize(outGrid.rows, std::vector<char>(outGrid.cols));
+    outGrid.colours.resize(outGrid.rows, std::vector<RGB>(outGrid.cols));
 
     // Loop through each ASCII block (row by row, column by column)
-    for (int blockY = 0; blockY < grid.rows; ++blockY) {
-        for (int blockX = 0; blockX < grid.cols; ++blockX) {
+    for (int blockY = 0; blockY < outGrid.rows; ++blockY) {
+        for (int blockX = 0; blockX < outGrid.cols; ++blockX) {
             long rSum = 0, gSum = 0, bSum = 0, brightnessSum = 0;
             int count = 0;
 
@@ -148,20 +148,19 @@ AsciiGrid AsciiConverter::convert(AVFrame* decodedFrame) {
                 int avgBrightness = static_cast<int>(std::round(static_cast<double>(brightnessSum) / count));
                 int index = (avgBrightness * (m_asciiChars.size() - 1)) / 255;
 
-                grid.chars[blockY][blockX] = m_asciiChars[index];
-                grid.colours[blockY][blockX] = RGB{
+                outGrid.chars[blockY][blockX] = m_asciiChars[index];
+                outGrid.colours[blockY][blockX] = RGB{
                     static_cast<uint8_t>(rSum / count),
                     static_cast<uint8_t>(gSum / count),
                     static_cast<uint8_t>(bSum / count)
                 }; // set average red, green and blue colours for the block
             } else {
                 // safety fallback: empty cell
-                grid.chars[blockY][blockX] = ' ';
-                grid.colours[blockY][blockX] = RGB{0, 0, 0};
+                outGrid.chars[blockY][blockX] = ' ';
+                outGrid.colours[blockY][blockX] = RGB{0, 0, 0};
             }
         }
     }
 
-    return grid;
 }
 } // namespace AsciiVideoFilter

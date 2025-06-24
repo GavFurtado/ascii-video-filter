@@ -9,6 +9,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 
 extern "C" {
+    #include <libavutil/pixdesc.h>
     #include <libavutil/error.h>
     #include "../include/stb_truetype.h"
     #include <libavutil/imgutils.h>
@@ -23,7 +24,7 @@ AsciiRenderer::AsciiRenderer()
       m_bitmap(nullptr),
       m_fontInfo(nullptr),
       m_frame(nullptr),
-      m_frameBuffer(nullptr),
+      m_frameBuffer(nullptr), 
       m_frameWidth(0),
       m_frameHeight(0),
       m_blockWidth(0),
@@ -72,12 +73,19 @@ bool AsciiRenderer::loadFont(const std::string& path) {
     m_fontBuffer = new uint8_t[size];
     if (!file.read(reinterpret_cast<char*>(m_fontBuffer), size)) {
         std::cerr << "Error (AsciiRenderer::loadFont): Failed to read font data.\n";
+        delete[] m_fontBuffer;
+        m_fontBuffer = nullptr;
         return false;
     }
 
     m_fontInfo = new stbtt_fontinfo;
     if (!stbtt_InitFont(static_cast<stbtt_fontinfo*>(m_fontInfo), m_fontBuffer, 0)) {
         std::cerr << "Error (AsciiRenderer::loadFont): Failed to initialize stbtt font.\n";
+        // If font init fails, cleanup both m_fontInfo and m_fontBuffer
+        delete static_cast<stbtt_fontinfo*>(m_fontInfo);
+        m_fontInfo = nullptr;
+        delete[] m_fontBuffer;
+        m_fontBuffer = nullptr;
         return false;
     }
 
@@ -85,6 +93,21 @@ bool AsciiRenderer::loadFont(const std::string& path) {
 }
 
 int AsciiRenderer::initFont(const std::string& fontPath, int fontHeight) {
+    // If initFont is called multiple times, clean up existing font resources first
+    // This prevents leaks if a new font is loaded.
+    if (m_fontBuffer) {
+        delete[] m_fontBuffer;
+        m_fontBuffer = nullptr;
+    }
+    if (m_bitmap) {
+        delete[] m_bitmap;
+        m_bitmap = nullptr;
+    }
+    if (m_fontInfo) {
+        delete static_cast<stbtt_fontinfo*>(m_fontInfo);
+        m_fontInfo = nullptr;
+    }
+
     if (!loadFont(fontPath)) {
         return static_cast<int>(AppErrorCode::APP_ERR_FONT_LOAD_FAILED);
     }
@@ -96,21 +119,33 @@ int AsciiRenderer::initFont(const std::string& fontPath, int fontHeight) {
     m_ascent = static_cast<int>(m_ascent * m_scale);
 
     // Allocate space for one glyph at max block size
+    // Consider if this allocation should also be checked for failure
     m_bitmap = new unsigned char[fontHeight * fontHeight];
+    if (!m_bitmap) {
+        std::cerr << "Error (AsciiRenderer::initFont): Failed to allocate glyph bitmap.\n";
+        // If m_bitmap allocation fails, clean up font resources that were successfully loaded
+        delete static_cast<stbtt_fontinfo*>(m_fontInfo);
+        m_fontInfo = nullptr;
+        delete[] m_fontBuffer;
+        m_fontBuffer = nullptr;
+        return AVERROR(ENOMEM);
+    }
     return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS);
 }
 
-int AsciiRenderer::initFrame(int cols, int rows, int blockWidth, int blockHeight) {
+int AsciiRenderer::initFrame(int targetFrameWidth, int targetFrameHeight, int blockWidth, int blockHeight) {
+    // cleanup();
+
     m_blockWidth = blockWidth;
     m_blockHeight = blockHeight;
-    m_frameWidth = cols * blockWidth;
-    m_frameHeight = rows * blockHeight;
+    m_frameWidth = targetFrameWidth;
+    m_frameHeight = targetFrameHeight;
 
     // Allocate AVFrame structure
     m_frame = av_frame_alloc();
     if (!m_frame) {
         std::cerr << "Error (AsciiRenderer::initFrame) Failed to allocate AVFrame: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, AVERROR(ENOMEM)) << "\n";
-        return AVERROR(ENOMEM);  // Out of memory
+        return AVERROR(ENOMEM); // Out of memory
     }
 
     m_frame->format = AV_PIX_FMT_RGB24;
@@ -118,27 +153,61 @@ int AsciiRenderer::initFrame(int cols, int rows, int blockWidth, int blockHeight
     m_frame->height = m_frameHeight;
 
     // Get buffer size and allocate it
-    int bufferSize = av_image_get_buffer_size(AV_PIX_FMT_RGB24, m_frameWidth, m_frameHeight, 1);
+    int bufferSize = av_image_get_buffer_size(AV_PIX_FMT_RGB24, m_frameWidth, m_frameHeight, 32);
     if (bufferSize < 0) {
         std::cerr << "Invalid image buffer size.\n";
+        av_frame_free(&m_frame); // Free m_frame struct on buffer size error
+        m_frame = nullptr; // Ensure pointer is nullified
         return bufferSize;
     }
 
-    m_frameBuffer = static_cast<uint8_t*>(av_malloc(bufferSize));
+    m_frameBuffer = static_cast<uint8_t*>(av_malloc(bufferSize + 64));
     if (!m_frameBuffer) {
         std::cerr << "Error (AsciiRenderer::initFrame) Failed to allocate AVFrame buffer: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, AVERROR(ENOMEM)) << "\n";
+        av_frame_free(&m_frame); 
+        m_frame = nullptr; 
         return AVERROR(ENOMEM);
     }
 
     int ret = av_image_fill_arrays(m_frame->data, m_frame->linesize, m_frameBuffer, AV_PIX_FMT_RGB24,
-                                   m_frameWidth, m_frameHeight, 1);
+                                   m_frameWidth, m_frameHeight, 32);
     if (ret < 0) {
+        // If av_image_fill_arrays fails, free both m_frameBuffer and m_frame
+        av_free(m_frameBuffer); 
+        m_frameBuffer = nullptr; 
+        av_frame_free(&m_frame); 
+        m_frame = nullptr; 
         std::cerr << "Failed to fill AVFrame image arrays.\n";
         return ret;
     }
 
     std::memset(m_frameBuffer, 0, bufferSize);  // Clear to black
     return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS);
+}
+
+AVFrame* AsciiRenderer::render(const AsciiGrid& grid) {
+    if (!m_frame || !m_fontInfo) {
+        std::cerr << "Renderer not initialized.\n";
+        return nullptr;
+    }
+
+    // Clear the frame each time before rendering
+    int bufferSize = av_image_get_buffer_size(AV_PIX_FMT_RGB24, m_frameWidth, m_frameHeight, 32);
+    std::memset(m_frameBuffer, 0, bufferSize);
+
+    for (int row = 0; row < grid.rows; ++row) {
+        for (int col = 0; col < grid.cols; ++col) {
+            char c = grid.chars[row][col];
+            RGB color = grid.colours[row][col];
+
+            int x = col * m_blockWidth;
+            int y = row * m_blockHeight + m_ascent;
+
+            drawGlyph(c, x, y, color);
+        }
+    }
+
+    return m_frame;
 }
 
 void AsciiRenderer::drawGlyph(char c, int x, int y, RGB color) {
@@ -173,31 +242,6 @@ void AsciiRenderer::drawGlyph(char c, int x, int y, RGB color) {
     }
 
     stbtt_FreeBitmap(glyph, nullptr);
-}
-
-AVFrame* AsciiRenderer::render(const AsciiGrid& grid) {
-    if (!m_frame || !m_fontInfo) {
-        std::cerr << "Renderer not initialized.\n";
-        return nullptr;
-    }
-
-    // Clear the frame each time before rendering
-    int bufferSize = av_image_get_buffer_size(AV_PIX_FMT_RGB24, m_frameWidth, m_frameHeight, 1);
-    std::memset(m_frameBuffer, 0, bufferSize);
-
-    for (int row = 0; row < grid.rows; ++row) {
-        for (int col = 0; col < grid.cols; ++col) {
-            char c = grid.chars[row][col];
-            RGB color = grid.colours[row][col];
-
-            int x = col * m_blockWidth;
-            int y = row * m_blockHeight + m_ascent;
-
-            drawGlyph(c, x, y, color);
-        }
-    }
-
-    return m_frame;
 }
 
 } // namespace AsciiVideoFilter

@@ -35,13 +35,13 @@ public:
     /**
      * @brief Initializes the output AVFrame dimensions and buffer.
      *
-     * @param cols Number of character columns.
-     * @param rows Number of character rows.
+     * @param targetFrameWidth The desired pixel width of the output AVFrame.
+     * @param targetFrameHeight The desired pixel height of the output AVFrame.
      * @param blockWidth Pixel width of each character cell.
      * @param blockHeight Pixel height of each character cell.
      * @return 0 on success, or negative FFmpeg/AppErrorCode on failure.
      */
-    int initFrame(int cols, int rows, int blockWidth, int blockHeight);
+    int initFrame(int targetFrameWidth, int targetFrameHeight, int blockWidth, int blockHeight);
 
     /**
      * @brief Renders the ASCII grid with color to an AVFrame.

@@ -39,7 +39,8 @@ enum AppErrorCode {
     APP_ERR_DECODER_NOT_FOUND = -102,        // FFmpeg could not find a suitable decoder
     APP_ERR_CONVERTER_INIT_FAILED = -103,    // AsciiConverter initialization failed (e.g., sws_getContext)
     APP_ERR_FRAME_CONVERSION_FAILED = -104,   // Error during frame-to-ASCII conversion
-    APP_ERR_FONT_LOAD_FAILED = -105,   // Error loading font
+    APP_ERR_FONT_INIT_FAILED = -105,   // Error loading font
+    APP_ERR_FONT_LOAD_FAILED = -106,   // Error loading font
 };
 
 namespace Utils {

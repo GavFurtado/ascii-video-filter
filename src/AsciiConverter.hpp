@@ -56,9 +56,9 @@ public:
      * for brightness and color and mapped to a character.
      *
      * @param decoded_frame A pointer to an AVFrame from the decoder.
-     * @return AsciiGrid structure representing the ASCII characters and colors for the frame.
+     * @param outGrid AsciiGrid reference; essentially the return of the function.
      */
-    [[nodiscard]] AsciiGrid convert(AVFrame* decodedFrame);
+     void convert(AVFrame* decodedFrame, AsciiGrid& outGrid);
 
     /**
      * @brief Sets the ASCII character set used for brightness mapping.
