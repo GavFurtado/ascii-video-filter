@@ -4,6 +4,7 @@
 #include "VideoEncoder.hpp"
 #include "AsciiConverter.hpp"
 #include "AsciiRenderer.hpp"
+#include <string>
 
 extern "C" {
     #include <libavutil/frame.h>
@@ -22,6 +23,7 @@ int Application::run(int argc, const char *argv[]) {
     // TODO: AppErrorCodes aren't setup right in recent parts of the codebase. Fix soon
     // TODO: Actual Multithreaded Pipeline.
 
+    const std::string ttfFontPath = "./assets/RobotoMono-Regular.ttf";
     if (argc < 3) {
         std::cerr << "Usage: " << argv[0] << " <input_file> <output_file>\n";
         return 1;
@@ -29,6 +31,7 @@ int Application::run(int argc, const char *argv[]) {
 
     const std::string inputPath = argv[1];
     const std::string outputPath = argv[2];
+    
 
     VideoDecoder decoder;
     if (decoder.open(inputPath) < 0) {
@@ -48,7 +51,6 @@ int Application::run(int argc, const char *argv[]) {
 
     AsciiConverter converter;
     converter.init(decoder.getWidth(), decoder.getHeight(), decoder.getPixelFormat());
-    AsciiRenderer renderer;
     
     AVFrame* inFrame = av_frame_alloc();
     if (!inFrame) {
@@ -56,10 +58,12 @@ int Application::run(int argc, const char *argv[]) {
         return 1;
     }
 
-    // renderer isn't setup right
+    AsciiRenderer renderer;
+    renderer.initFont(ttfFontPath, converter.getBlockHeight());
 
     while (decoder.readFrame(inFrame)) {
         AsciiGrid grid = converter.convert(inFrame);
+        renderer.initFrame(grid.cols, grid.rows, converter.getBlockWidth(), converter.getBlockHeight());
         AVFrame* renderedFrame = renderer.render(grid);
 
         if (!renderedFrame) {
@@ -77,6 +81,7 @@ int Application::run(int argc, const char *argv[]) {
 
     encoder.finalize();
 
+    // remux the audio stream if exists
     if (decoder.hasAudio()) {
         AVPacket* pkt = av_packet_alloc();
         if (!pkt) {

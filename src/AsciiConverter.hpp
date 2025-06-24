@@ -69,6 +69,10 @@ public:
      */
     void setAsciiCharset(const std::string& charset);
 
+    // Getters
+    int getBlockHeight() { return m_blockHeight; }
+    int getBlockWidth() { return m_blockWidth; }
+
 private:
     char m_errbuf[AV_ERROR_MAX_STRING_SIZE];
     SwsContext *m_swsContext;   ///< Used to convert from input format to RGB24

@@ -5,3 +5,4 @@ Testing/
 .git/
 obj/
 ./AsciiVideoFilter
+vids/
