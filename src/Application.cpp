@@ -40,6 +40,10 @@ int Application::run(int argc, const char *argv[]) {
     const std::string inputPath = argv[1];
     const std::string outputPath = argv[2];
 
+    const int blockWidth = 8;
+    const int blockHeight = 12;
+
+
     const std::string ttfFontPath = "./assets/RubikMonoOne-Regular.ttf";
     const std::unordered_map<std::string, std::string> charPresets = {
         {"standard", " .:-=+*#%@"},
@@ -60,8 +64,8 @@ int Application::run(int argc, const char *argv[]) {
     int videoHeight = decoder.getHeight();
 
     AsciiConverter converter;
-    converter.setAsciiCharset(charPresets.at("detailed"));
-    converter.init(videoWidth, videoHeight, decoder.getPixelFormat(), 12, 36);
+    converter.setAsciiCharset(charPresets.at("standard"));
+    converter.init(videoWidth, videoHeight, decoder.getPixelFormat(), blockWidth, blockHeight);
 
     AVFrame* inFrame = av_frame_alloc();
     if (!inFrame) {
@@ -76,33 +80,33 @@ int Application::run(int argc, const char *argv[]) {
         return static_cast<int>(AppErrorCode::APP_ERR_FONT_INIT_FAILED); 
     }
 
-    // VideoEncoder encoder;
-    // if (encoder.init(outputPath, decoder.getMetadata(), videoWidth, videoHeight, 400000) < 0) {
-    //     std::cerr << "Failed to initialize video encoder.\n";
-    //     return 1;
-    // }
+    VideoEncoder encoder;
+    if (encoder.init(outputPath, decoder.getMetadata(), videoWidth, videoHeight, 400000) < 0) {
+        std::cerr << "Failed to initialize video encoder.\n";
+        return 1;
+    }
 
-    // if (decoder.hasAudio()) {
-    //     encoder.addAudioStreamFrom(decoder.getAudioStream());
-    // }
+    if (decoder.hasAudio()) {
+        encoder.addAudioStreamFrom(decoder.getAudioStream());
+    }
 
     AsciiGrid grid;
     grid.cols = converter.getGridCols();
     grid.rows = converter.getGridRows();
     grid.chars.assign(grid.rows, std::vector<char>(grid.cols));
     grid.colours.assign(grid.rows, std::vector<RGB>(grid.cols));
+    renderer.initFrame(videoWidth, videoHeight, converter.getBlockWidth(), converter.getBlockHeight());
 
     int frameCount = 0;
     while (decoder.readFrame(inFrame) && (MAX_FRAMES == -1 || frameCount < MAX_FRAMES)) {
         converter.convert(inFrame, grid);
-        renderer.initFrame(videoWidth, videoHeight, converter.getBlockWidth(), converter.getBlockHeight());
 
         auto start = std::chrono::steady_clock::now();
         AVFrame* renderedFrame = renderer.render(grid);
         auto end = std::chrono::steady_clock::now();
 
-        std::cout << "Frame: " << frameCount << " Render time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms\n";
         #ifdef DEBUG
+        std::cout << "Frame: " << frameCount << " Render time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms\n";
         #endif // DEBUG
 
         if (!renderedFrame) {
@@ -110,10 +114,10 @@ int Application::run(int argc, const char *argv[]) {
             break;
         }
 
-        // if (encoder.encodeFrame(renderedFrame) < 0) {
-        //     std::cerr << "Encoding frame failed.\n";
-        //     break;
-        // }
+        if (encoder.encodeFrame(renderedFrame) < 0) {
+            std::cerr << "Encoding frame failed.\n";
+            break;
+        }
 
         av_frame_unref(inFrame);
         frameCount++;
@@ -122,38 +126,37 @@ int Application::run(int argc, const char *argv[]) {
 
     LOG("Reached frame rendering loop exit.\n") ;
 
-    // encoder.finalize();
+    encoder.finalize();
 
     LOG("encoder.finalize() executed.\n");
 
-    
     long count = 0;
     std::cout<< "Remuxxing audio stream.\n";
     // remux the audio stream if exists
-    // if (decoder.hasAudio()) {
-    //     AVPacket* pkt = av_packet_alloc();
-    //     if (!pkt) {
-    //         std::cerr << "Failed to allocate audio packet.\n";
-    //         // Handle error, maybe return 1;
-    //     } else {
-    //         // Loop for audio packets
-    //         while (decoder.readNextAudioPacket(pkt)) {
-    //             LOG("Audio Packet Loop Counter: %d, PTS: %lld, DTS: %lld, Duration: %lld, Stream Index: %d\n",
-    //                 count, pkt->pts, pkt->dts, pkt->duration, pkt->stream_index);
-    //
-    //             if (encoder.writeAudioPacket(pkt) < 0) {
-    //                 std::cerr << "Error writing audio packet. Stopping audio remux.\n";
-    //                 av_packet_unref(pkt);
-    //                 break;
-    //             }
-    //             av_packet_unref(pkt); // Unreference packet after successful write
-    //             count++;
-    //         }
-    //         av_packet_free(&pkt); // Free the packet when done with the loop
-    //     }
-    // } else {
-    //     std::cout << "No audio stream to remux.\n";
-    // }
+    if (decoder.hasAudio()) {
+        AVPacket* pkt = av_packet_alloc();
+        if (!pkt) {
+            std::cerr << "Failed to allocate audio packet.\n";
+            return static_cast<int>(AppErrorCode::APP_ERR_AUDIO_PKT_ALLOC_FAILED);
+        } else {
+            // Loop for audio packets
+            while (decoder.readNextAudioPacket(pkt)) {
+                LOG("Audio Packet Loop Counter: %d, PTS: %lld, DTS: %lld, Duration: %lld, Stream Index: %d\n",
+                    count, pkt->pts, pkt->dts, pkt->duration, pkt->stream_index);
+
+                if (encoder.writeAudioPacket(pkt) < 0) {
+                    std::cerr << "Error writing audio packet. Stopping audio remux.\n";
+                    av_packet_unref(pkt);
+                    break;
+                }
+                av_packet_unref(pkt); // Unreference packet after successful write
+                count++;
+            }
+            av_packet_free(&pkt); // Free the packet when done with the loop
+        }
+    } else {
+        std::cout << "No audio stream to remux.\n";
+    }
 
     LOG("Audio Stream remuxxed into output file.\n");
 

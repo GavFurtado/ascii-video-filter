@@ -41,6 +41,7 @@ enum AppErrorCode {
     APP_ERR_FRAME_CONVERSION_FAILED = -104,   // Error during frame-to-ASCII conversion
     APP_ERR_FONT_INIT_FAILED = -105,   // Error loading font
     APP_ERR_FONT_LOAD_FAILED = -106,   // Error loading font
+    APP_ERR_AUDIO_PKT_ALLOC_FAILED = -107,
 };
 
 namespace Utils {

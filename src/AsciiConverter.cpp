@@ -51,7 +51,7 @@ int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fm
     m_srcWidth = src_width;
     m_srcHeight = src_height;
     m_blockWidth = asciiBlockWidth;
-    m_blockHeight = asciiBlockWidth;
+    m_blockHeight = asciiBlockHeight;
 
     m_gridCols = src_width / m_blockWidth;
     m_gridRows = src_height / m_blockHeight;
