@@ -124,7 +124,8 @@ int VideoEncoder::init(const std::string& outputPath, const VideoMetadata& metad
 
     // Set H.264 preset for good compression/speed balance
     av_opt_set(m_codecContext->priv_data, "preset", "medium", 0);
-    av_opt_set(m_codecContext->priv_data, "crf", "23", 0); // Constant Rate Factor
+    av_opt_set(m_codecContext->priv_data, "crf", "28", 0); // Constant Rate Factor
+    av_opt_set(m_codecContext->priv_data, "tune", "stillimage", 0);
     
     // Some formats want stream headers to be separate
     if (m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) {
