@@ -213,7 +213,17 @@ AVFrame* AsciiRenderer::render(const AsciiGrid& grid, bool enableColour) {
         }
     }
 
-    return m_frame;
+    AVFrame* cloned_frame = av_frame_clone(m_frame);
+    if (!cloned_frame) {
+        std::cerr << "Error: Failed to clone AVFrame in AsciiRenderer::render." << std::endl;
+        return nullptr; // Indicate failure
+    }
+    // Debug print to confirm the clone is being returned
+    // (You can remove this after confirming it works)
+    std::cerr << "DEBUG: AsciiRenderer::render - Returning cloned_frame: "
+        << cloned_frame << ", format: " << cloned_frame->format << std::endl;
+
+    return cloned_frame; // The caller (Application) is now responsible for freeing this cloned_frame
 }
 
 void AsciiRenderer::drawGlyph(char c, int x, int y, RGB color, bool enableColour) {
@@ -221,6 +231,17 @@ void AsciiRenderer::drawGlyph(char c, int x, int y, RGB color, bool enableColour
     assert(c >= 32 && c != 127 && "drawGlyph: character must be printable ASCII (32–126)");
     if (!m_frame || !m_fontInfo)
         return;
+
+    #ifdef DEBUG
+    std::cerr << "\nDEBUG: AsciiRenderer::drawGlyph - m_frame address: " << m_frame << std::endl;
+    if (m_frame) {
+        std::cerr << "DEBUG: AsciiRenderer::drawGlyph - m_frame->format: " << m_frame->format << " (Expected: " << AV_PIX_FMT_RGB24 << ")" << std::endl;
+        std::cerr << "DEBUG: AsciiRenderer::drawGlyph - m_frame->width: " << m_frame->width << std::endl;
+        std::cerr << "DEBUG: AsciiRenderer::drawGlyph - m_frame->height: " << m_frame->height << std::endl;
+        std::cerr << "DEBUG: AsciiRenderer::drawGlyph - m_frame->data[0] address: " << (void*)m_frame->data[0] << std::endl;
+    }
+    #endif // DEBUG
+    
     assert(m_frame->format == AV_PIX_FMT_RGB24);
 
     auto* font = static_cast<stbtt_fontinfo*>(m_fontInfo);

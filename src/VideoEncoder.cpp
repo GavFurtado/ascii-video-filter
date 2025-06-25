@@ -116,8 +116,8 @@ int VideoEncoder::init(const std::string& outputPath, const VideoMetadata& metad
     m_codecContext->width = m_width;
     m_codecContext->height = m_height;
     m_codecContext->time_base = av_inv_q(metadata.frameRate);
-    LOG("DEBUG: VideoEncoder codecContext time_base set to: %d/%d\n", m_codecContext->time_base.num, m_codecContext->time_base.den);
-    m_codecContext->framerate = av_inv_q(metadata.timeBase); // fps = 1/timebase
+    // LOG("DEBUG: VideoEncoder codecContext time_base set to: %d/%d\n", m_codecContext->time_base.num, m_codecContext->time_base.den);
+    m_codecContext->framerate = metadata.frameRate;
     m_codecContext->pix_fmt = AV_PIX_FMT_YUV420P; // H.264 standard format
     m_codecContext->gop_size = 12; // Keyframe interval
     m_codecContext->max_b_frames = 1;
@@ -287,21 +287,21 @@ int VideoEncoder::encodeFrame(AVFrame* frame) {
         std::cerr << "Error (VideoEncoder::encodeFrame): Encoder not initialized.\n";
         return static_cast<int>(AppErrorCode::APP_ERR_CONVERTER_INIT_FAILED);
     }
-    
+
     // Convert RGB24 to YUV420P
     sws_scale(m_swsContext, frame->data, frame->linesize, 0, frame->height,
               m_yuvFrame->data, m_yuvFrame->linesize);
-    
+
     // Set frame timing
     m_yuvFrame->pts = m_frameCount++;
-    
+
     // Send frame to encoder
     int ret = avcodec_send_frame(m_codecContext, m_yuvFrame);
     if (ret < 0) {
         std::cerr << "Error (VideoEncoder::encodeFrame): Error sending frame to encoder: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
         return ret;
     }
-    
+
     // Receive encoded packets
     while (ret >= 0) {
         ret = avcodec_receive_packet(m_codecContext, m_packet);
@@ -311,15 +311,15 @@ int VideoEncoder::encodeFrame(AVFrame* frame) {
             std::cerr << "Error (VideoEncoder::encodeFrame): Error receiving packet: " << av_make_error_string(m_errbuf, AV_ERROR_MAX_STRING_SIZE, ret) << "\n";
             return ret;
         }
-        
+
         ret = writePacket(m_packet);
         if (ret < 0) {
             return ret;
         }
-        
+
         av_packet_unref(m_packet);
     }
-    
+
     return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS);
 }
 
