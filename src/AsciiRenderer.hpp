@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include "AsciiTypes.hpp"
 
 extern "C" {
@@ -10,6 +11,15 @@ extern "C" {
 }
 
 namespace AsciiVideoFilter {
+
+// Struct to stores cache glyph bitmaps
+struct CachedGlyph {
+    unsigned char* bitmap;
+    int width;
+    int height;
+    int xoff;
+    int yoff;
+};
 
 class AsciiRenderer {
 public:
@@ -55,15 +65,13 @@ public:
      * @brief Cleans up allocated frame, font, and buffers.
      */
     void cleanup();
-
-
-    
 private:
     char m_errbuf[AV_ERROR_MAX_STRING_SIZE];
     // Font and glyph
     uint8_t* m_fontBuffer;     ///< Raw font file buffer
     unsigned char* m_bitmap;   ///< Temporary buffer for glyph bitmaps
     void* m_fontInfo;          ///< Opaque pointer to font info (stbtt_fontinfo*)
+    std::unordered_map<char, CachedGlyph> m_glyphCache;
 
     float m_scale;             ///< Font scale computed from pixel height
     int m_ascent;              ///< Font ascent in pixels
@@ -76,7 +84,7 @@ private:
 
     int m_blockWidth;          ///< Width of a single glyph block
     int m_blockHeight;         ///< Height of a single glyph block
-
+private:
     bool loadFont(const std::string& path);
     void drawGlyph(char c, int x, int y, RGB color);
 };

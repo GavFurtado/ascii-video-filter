@@ -58,6 +58,12 @@ void AsciiRenderer::cleanup() {
         av_frame_free(&m_frame);
         m_frame = nullptr;
     }
+
+    // Free cached glyph bitmaps
+    for (auto const& [key, val] : m_glyphCache) {
+        stbtt_FreeBitmap(val.bitmap, nullptr);
+    }
+    m_glyphCache.clear();
 }
 
 bool AsciiRenderer::loadFont(const std::string& path) {
@@ -213,17 +219,33 @@ AVFrame* AsciiRenderer::render(const AsciiGrid& grid) {
 void AsciiRenderer::drawGlyph(char c, int x, int y, RGB color) {
 
     assert(c >= 32 && c != 127 && "drawGlyph: character must be printable ASCII (32–126)");
-
     if (!m_frame || !m_fontInfo)
         return;
-
     assert(m_frame->format == AV_PIX_FMT_RGB24);
 
     auto* font = static_cast<stbtt_fontinfo*>(m_fontInfo);
 
+    unsigned char* glyph_bitmap = nullptr;
     int width, height, xoff, yoff;
-    unsigned char* glyph = stbtt_GetCodepointBitmap(font, 0, m_scale, c, &width, &height, &xoff, &yoff);
-    if (!glyph) return;
+
+    auto it = m_glyphCache.find(c);
+    if(it != m_glyphCache.end()) {
+        // glyph found in cache
+        glyph_bitmap = it->second.bitmap;
+        width = it->second.width;
+        height = it->second.height;
+        xoff = it->second.xoff;
+        yoff = it->second.yoff;
+    } else {
+        // glyph not found in cache, generate and cache it 
+        // since the char set itself is small enough we can just store all of them without some kinda lru or fifo
+        auto *font = static_cast<stbtt_fontinfo*>(m_fontInfo);
+        glyph_bitmap = stbtt_GetCodepointBitmap(font, 0, m_scale, c, &width, &height, &xoff, &yoff);
+        // assert(glyph_bitmap != nullptr && "Fatal Error: Glyph bitmap could not be generated.");
+        if(!glyph_bitmap) return;
+
+        m_glyphCache[c] = {glyph_bitmap, width, height, xoff, yoff}; // cache the glyph 
+    }
 
     for (int gy = 0; gy < height; ++gy) {
         for (int gx = 0; gx < width; ++gx) {
@@ -233,15 +255,13 @@ void AsciiRenderer::drawGlyph(char c, int x, int y, RGB color) {
                 continue;
 
             int dstIndex = dstY * m_frame->linesize[0] + dstX * 3;
-            float alpha = glyph[gy * width + gx] / 255.0f;
+            float alpha = glyph_bitmap[gy * width + gx] / 255.0f;
 
+            // set color
             m_frame->data[0][dstIndex + 0] = static_cast<uint8_t>(color.r * alpha);
             m_frame->data[0][dstIndex + 1] = static_cast<uint8_t>(color.g * alpha);
             m_frame->data[0][dstIndex + 2] = static_cast<uint8_t>(color.b * alpha);
         }
     }
-
-    stbtt_FreeBitmap(glyph, nullptr);
 }
-
 } // namespace AsciiVideoFilter
