@@ -191,7 +191,7 @@ int AsciiRenderer::initFrame(int targetFrameWidth, int targetFrameHeight, int bl
     return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS);
 }
 
-AVFrame* AsciiRenderer::render(const AsciiGrid& grid) {
+AVFrame* AsciiRenderer::render(const AsciiGrid& grid, bool enabledColour) {
     if (!m_frame || !m_fontInfo) {
         std::cerr << "Renderer not initialized.\n";
         return nullptr;

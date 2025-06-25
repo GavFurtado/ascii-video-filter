@@ -59,7 +59,7 @@ public:
      * @param grid AsciiGrid containing characters and RGB values.
      * @return AVFrame* pointing to the internal RGB frame.
      */
-    AVFrame* render(const AsciiGrid& grid);
+    AVFrame* render(const AsciiGrid& grid, bool enableColor = true);
 
     /**
      * @brief Cleans up allocated frame, font, and buffers.

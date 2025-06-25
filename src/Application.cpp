@@ -5,15 +5,17 @@
 #include "AsciiRenderer.hpp"
 #include "Utils.hpp"
 
+#include <algorithm>
+#include <cstdint>
+#include <libavutil/log.h>
 #include <string>
 #include <unordered_map>
+#include <iostream>
 
 extern "C" {
     #include <libavutil/frame.h>
     #include <libavcodec/packet.h>
 }
-
-#include <iostream>
 
 namespace AsciiVideoFilter {
 
@@ -24,27 +26,17 @@ int Application::run(int argc, const char *argv[]) {
     // TODO: Better argument parsing. Current one very rudimentary
     // TODO: AppErrorCodes aren't setup right in recent parts of the codebase. Fix soon
     // TODO: Actual Multithreaded Pipeline.
-    // TODO: fix memory leak (IMPIMPIMP)
 
+    AppConfig config = Utils::parseArguments(argc, argv);
 
-    // Define a maximum frame count for testing purposes
-    // Set to -1 to process all frames
-    // const int MAX_FRAMES = 3;
-    const int MAX_FRAMES = -1;
-
-    if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <input_file> <output_file>\n";
-        return 1;
+    if(config.verbose) {
+        Utils::printConfig(config);
+        av_log_set_level(AV_LOG_VERBOSE);
+        #ifdef DEBUG
+            av_log_set_level(AV_LOG_DEBUG);
+        #endif // DEBUG
     }
 
-    const std::string inputPath = argv[1];
-    const std::string outputPath = argv[2];
-
-    const int blockWidth = 8;
-    const int blockHeight = 12;
-
-
-    const std::string ttfFontPath = "./assets/RubikMonoOne-Regular.ttf";
     const std::unordered_map<std::string, std::string> charPresets = {
         {"standard", " .:-=+*#%@"},
         {"detailed", " .'`^,:;Il!i><~+_-?][}{1)(|\\/tfjrxnumbroCLJVUNYXOZmwqpdbkhao*#MW&8%B@$"},
@@ -53,19 +45,30 @@ int Application::run(int argc, const char *argv[]) {
         // {"shapes", " ▫▪▩▨▧▦▥▤▣▢□■"}
     };
 
+    // Determine charset to use
+    std::string charset = config.customCharset.empty() ?
+                        charPresets.at(config.charsetPreset) :
+                        config.customCharset;
+
 
     VideoDecoder decoder;
-    if (decoder.open(inputPath) < 0) {
+    if (decoder.open(config.inputPath) < 0) {
         std::cerr << "Failed to open input video.\n";
         return 1;
     }
 
     int videoWidth = decoder.getWidth();
     int videoHeight = decoder.getHeight();
+    double frameRate = decoder.getMetadata().getFps();
+
+    int64_t totalFrames = config.maxFrames == -1 ? decoder.getMetadata().getTotalFrames() :
+                     std::min<int64_t>(config.maxFrames, decoder.getMetadata().getTotalFrames());
+
+    ProgressTracker progress(totalFrames, frameRate, config.progressInterval, config.showProgress);
 
     AsciiConverter converter;
-    converter.setAsciiCharset(charPresets.at("standard"));
-    converter.init(videoWidth, videoHeight, decoder.getPixelFormat(), blockWidth, blockHeight);
+    converter.setAsciiCharset(charset);
+    converter.init(videoWidth, videoHeight, decoder.getPixelFormat(), config.blockWidth, config.blockHeight);
 
     AVFrame* inFrame = av_frame_alloc();
     if (!inFrame) {
@@ -75,18 +78,20 @@ int Application::run(int argc, const char *argv[]) {
 
     AsciiRenderer renderer;
     // Initialize AsciiRenderer's font
-    if (renderer.initFont(ttfFontPath, converter.getBlockHeight()) < 0) {
+    if (renderer.initFont(config.fontPath, converter.getBlockHeight()) < 0) {
         std::cerr << "Error: Failed to initialize ASCII renderer font. Exiting.\\n";
         return static_cast<int>(AppErrorCode::APP_ERR_FONT_INIT_FAILED); 
     }
 
+    renderer.initFrame(videoWidth, videoHeight, converter.getBlockWidth(), converter.getBlockHeight());
+
     VideoEncoder encoder;
-    if (encoder.init(outputPath, decoder.getMetadata(), videoWidth, videoHeight, 400000) < 0) {
+    if (encoder.init(config.outputPath, decoder.getMetadata(), videoWidth, videoHeight, 400000) < 0) {
         std::cerr << "Failed to initialize video encoder.\n";
         return 1;
     }
 
-    if (decoder.hasAudio()) {
+    if (config.enableAudio && decoder.hasAudio()) {
         encoder.addAudioStreamFrom(decoder.getAudioStream());
     }
 
@@ -95,20 +100,12 @@ int Application::run(int argc, const char *argv[]) {
     grid.rows = converter.getGridRows();
     grid.chars.assign(grid.rows, std::vector<char>(grid.cols));
     grid.colours.assign(grid.rows, std::vector<RGB>(grid.cols));
-    renderer.initFrame(videoWidth, videoHeight, converter.getBlockWidth(), converter.getBlockHeight());
 
-    int frameCount = 0;
-    while (decoder.readFrame(inFrame) && (MAX_FRAMES == -1 || frameCount < MAX_FRAMES)) {
+    int64_t frameCount = 0;
+    while (decoder.readFrame(inFrame) && (config.maxFrames == -1 || frameCount < config.maxFrames)) {
         converter.convert(inFrame, grid);
 
-        auto start = std::chrono::steady_clock::now();
-        AVFrame* renderedFrame = renderer.render(grid);
-        auto end = std::chrono::steady_clock::now();
-
-        #ifdef DEBUG
-        std::cout << "Frame: " << frameCount << " Render time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms\n";
-        #endif // DEBUG
-
+        AVFrame* renderedFrame = renderer.render(grid, config.enableColour);
         if (!renderedFrame) {
             std::cerr << "Rendering failed.\n";
             break;
@@ -118,21 +115,25 @@ int Application::run(int argc, const char *argv[]) {
             std::cerr << "Encoding frame failed.\n";
             break;
         }
-
         av_frame_unref(inFrame);
-        frameCount++;
+
+        progress.update(frameCount++);
     }
     av_frame_free(&inFrame);
 
-    LOG("Reached frame rendering loop exit.\n") ;
 
     encoder.finalize();
+    progress.finish();
 
-    LOG("encoder.finalize() executed.\n");
+    if(config.verbose) {
+        LOG("Video stream rendered and encoded..\n");
+    }
 
-    long count = 0;
-    std::cout<< "Remuxxing audio stream.\n";
+    int64_t count = 0;
     // remux the audio stream if exists
+    if(config.verbose) {
+        std::cout<< "Remuxxing audio stream.\n";
+    }
     if (decoder.hasAudio()) {
         AVPacket* pkt = av_packet_alloc();
         if (!pkt) {
@@ -141,8 +142,10 @@ int Application::run(int argc, const char *argv[]) {
         } else {
             // Loop for audio packets
             while (decoder.readNextAudioPacket(pkt)) {
-                LOG("Audio Packet Loop Counter: %d, PTS: %lld, DTS: %lld, Duration: %lld, Stream Index: %d\n",
-                    count, pkt->pts, pkt->dts, pkt->duration, pkt->stream_index);
+                if(config.verbose) {
+                    LOG("Audio Packet Loop Counter: %d, PTS: %lld, DTS: %lld, Duration: %lld, Stream Index: %d\n",
+                        count, pkt->pts, pkt->dts, pkt->duration, pkt->stream_index);
+                }
 
                 if (encoder.writeAudioPacket(pkt) < 0) {
                     std::cerr << "Error writing audio packet. Stopping audio remux.\n";
@@ -157,11 +160,10 @@ int Application::run(int argc, const char *argv[]) {
     } else {
         std::cout << "No audio stream to remux.\n";
     }
-
-    LOG("Audio Stream remuxxed into output file.\n");
-
+    if(config.verbose) {
+        LOG("Audio Stream remuxxed into output file.\n");
+    }
     LOG("End\n");
     return 0;
 }
-
 } // namespace AsciiVideoFilter

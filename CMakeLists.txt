@@ -25,9 +25,9 @@ file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
 
 # Library target from your source files
 add_library(AsciiVideoFilterLib STATIC ${SRC_FILES})
-target_include_directories(AsciiVideoFilterLib PUBLIC
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/include
+target_include_directories(AsciiVideoFilterLib
+    PRIVATE ${CMAKE_SOURCE_DIR}/src # internal headers
+    PUBLIC ${CMAKE_SOURCE_DIR}/include # external headers (single header libraries)
 )
 target_link_libraries(AsciiVideoFilterLib
     PkgConfig::FFMPEG
