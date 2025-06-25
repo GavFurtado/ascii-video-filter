@@ -71,8 +71,8 @@ struct AppConfig {
     std::string charsetPreset = "detailed";
     std::string customCharset = "";
     int maxFrames = -1;  // -1 means process all frames
-    int blockWidth = 12;
-    int blockHeight = 36;
+    int blockWidth = 8;
+    int blockHeight = 12;
     bool enableAudio = true;
     bool enableColour = true;
     bool verbose = false;

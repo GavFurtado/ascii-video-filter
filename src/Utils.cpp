@@ -203,6 +203,18 @@ AppConfig parseArguments(int argc, const char* argv[]) {
     return config;
 }
 
+void printConfig(const AppConfig& config) {
+    std::cout << "Configuration:\n";
+    std::cout << "  Input: " << config.inputPath << "\n";
+    std::cout << "  Output: " << config.outputPath << "\n";
+    std::cout << "  Font: " << config.fontPath << "\n";
+    std::cout << "  Charset: " << (config.customCharset.empty() ? config.charsetPreset : "custom") << "\n";
+    std::cout << "  Block size: " << config.blockWidth << "x" << config.blockHeight << "\n";
+    std::cout << "  Max frames: " << (config.maxFrames == -1 ? "all" : std::to_string(config.maxFrames)) << "\n";
+    std::cout << "  Audio: " << (config.enableAudio ? "enabled" : "disabled") << "\n";
+    std::cout << std::endl;
+}
+
 const char* getAppErrorString(int errnum) {
     switch (static_cast<AppErrorCode>(errnum)) {
         case APP_ERR_SUCCESS: return "Success";

@@ -29,6 +29,8 @@ int Application::run(int argc, const char *argv[]) {
 
     AppConfig config = Utils::parseArguments(argc, argv);
 
+    av_log_set_level(AV_LOG_PANIC);
+
     if(config.verbose) {
         Utils::printConfig(config);
         av_log_set_level(AV_LOG_VERBOSE);

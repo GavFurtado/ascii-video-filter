@@ -191,7 +191,7 @@ int AsciiRenderer::initFrame(int targetFrameWidth, int targetFrameHeight, int bl
     return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS);
 }
 
-AVFrame* AsciiRenderer::render(const AsciiGrid& grid, bool enabledColour) {
+AVFrame* AsciiRenderer::render(const AsciiGrid& grid, bool enableColour) {
     if (!m_frame || !m_fontInfo) {
         std::cerr << "Renderer not initialized.\n";
         return nullptr;
@@ -209,14 +209,14 @@ AVFrame* AsciiRenderer::render(const AsciiGrid& grid, bool enabledColour) {
             int x = col * m_blockWidth;
             int y = row * m_blockHeight + m_ascent;
 
-            drawGlyph(c, x, y, color);
+            drawGlyph(c, x, y, color, enableColour);
         }
     }
 
     return m_frame;
 }
 
-void AsciiRenderer::drawGlyph(char c, int x, int y, RGB color) {
+void AsciiRenderer::drawGlyph(char c, int x, int y, RGB color, bool enableColour) {
 
     assert(c >= 32 && c != 127 && "drawGlyph: character must be printable ASCII (32–126)");
     if (!m_frame || !m_fontInfo)
@@ -257,10 +257,20 @@ void AsciiRenderer::drawGlyph(char c, int x, int y, RGB color) {
             int dstIndex = dstY * m_frame->linesize[0] + dstX * 3;
             float alpha = glyph_bitmap[gy * width + gx] / 255.0f;
 
-            // set color
-            m_frame->data[0][dstIndex + 0] = static_cast<uint8_t>(color.r * alpha);
-            m_frame->data[0][dstIndex + 1] = static_cast<uint8_t>(color.g * alpha);
-            m_frame->data[0][dstIndex + 2] = static_cast<uint8_t>(color.b * alpha);
+            if(enableColour) {
+                // set color
+                m_frame->data[0][dstIndex + 0] = static_cast<uint8_t>(color.r * alpha);
+                m_frame->data[0][dstIndex + 1] = static_cast<uint8_t>(color.g * alpha);
+                m_frame->data[0][dstIndex + 2] = static_cast<uint8_t>(color.b * alpha);
+            } else {
+                // For monochrome, use the character brightness to determine grayscale intensity
+                // Calculate brightness from the character's position in the ASCII set
+                float brightness = alpha * 255.0f; // Use glyph alpha as brightness
+                uint8_t gray = static_cast<uint8_t>(brightness);
+                m_frame->data[0][dstIndex + 0] = gray;
+                m_frame->data[0][dstIndex + 1] = gray;
+                m_frame->data[0][dstIndex + 2] = gray;
+            }
         }
     }
 }

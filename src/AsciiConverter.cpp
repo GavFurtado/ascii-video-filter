@@ -95,7 +95,7 @@ int AsciiConverter::init(int src_width, int src_height, AVPixelFormat src_pix_fm
     return static_cast<int>(AppErrorCode::APP_ERR_SUCCESS); 
 }
 
-void AsciiConverter::convert(AVFrame* decodedFrame, AsciiGrid &outGrid) {
+void AsciiConverter::convert(AVFrame* decodedFrame, AsciiGrid &outGrid, bool enableColor) {
 
     if (!m_swsContext || !m_rgbFrame || !decodedFrame) {
         std::cerr << "Error (AsciiConverter::convert): Not properly initialized.\n";
@@ -150,11 +150,15 @@ void AsciiConverter::convert(AVFrame* decodedFrame, AsciiGrid &outGrid) {
                 int index = (avgBrightness * (m_asciiChars.size() - 1)) / 255;
 
                 outGrid.chars[blockY][blockX] = m_asciiChars[index];
-                outGrid.colours[blockY][blockX] = RGB{
-                    static_cast<uint8_t>(rSum / count),
-                    static_cast<uint8_t>(gSum / count),
-                    static_cast<uint8_t>(bSum / count)
-                }; // set average red, green and blue colours for the block
+                if(enableColor) {
+                    outGrid.colours[blockY][blockX] = RGB{
+                        static_cast<uint8_t>(rSum / count),
+                        static_cast<uint8_t>(gSum / count),
+                        static_cast<uint8_t>(bSum / count)
+                    }; // set average red, green and blue colours for the block
+                } else {
+                    outGrid.colours[blockY][blockX] = RGB{255, 255, 255};
+                }
             } else {
                 // safety fallback: empty cell
                 outGrid.chars[blockY][blockX] = ' ';
@@ -162,6 +166,6 @@ void AsciiConverter::convert(AVFrame* decodedFrame, AsciiGrid &outGrid) {
             }
         }
     }
-
 }
+
 } // namespace AsciiVideoFilter

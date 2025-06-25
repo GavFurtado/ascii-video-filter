@@ -57,8 +57,9 @@ public:
      *
      * @param decoded_frame A pointer to an AVFrame from the decoder.
      * @param outGrid AsciiGrid reference; essentially the return of the function.
+     * @param enableColor If false, colors will be set to white (255,255,255) for monochrome output.
      */
-     void convert(AVFrame* decodedFrame, AsciiGrid& outGrid);
+     void convert(AVFrame* decodedFrame, AsciiGrid& outGrid, bool enableColour = true);
 
     /**
      * @brief Sets the ASCII character set used for brightness mapping.

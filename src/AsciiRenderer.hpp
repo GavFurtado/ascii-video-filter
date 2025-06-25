@@ -57,6 +57,7 @@ public:
      * @brief Renders the ASCII grid with color to an AVFrame.
      *
      * @param grid AsciiGrid containing characters and RGB values.
+     * @param enableColor If false, renders in grayscale using character brightness only.
      * @return AVFrame* pointing to the internal RGB frame.
      */
     AVFrame* render(const AsciiGrid& grid, bool enableColor = true);
@@ -86,7 +87,7 @@ private:
     int m_blockHeight;         ///< Height of a single glyph block
 private:
     bool loadFont(const std::string& path);
-    void drawGlyph(char c, int x, int y, RGB color);
+    void drawGlyph(char c, int x, int y, RGB color, bool enableColor = true);
 };
 
 } // namespace AsciiVideoFilter
